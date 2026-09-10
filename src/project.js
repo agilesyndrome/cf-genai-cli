@@ -3,13 +3,13 @@ import { spawnSync } from "node:child_process";
 
 const packagePath = "package.json";
 
-function run(command, args, { inherit = true } = {}) {
+function run(command, args, { inherit = true, failOnError = true } = {}) {
   const result = spawnSync(command, args, {
     stdio: inherit ? "inherit" : ["ignore", "pipe", "pipe"],
     encoding: "utf8",
   });
   if (result.error) throw result.error;
-  if (result.status !== 0) process.exitCode = result.status || 1;
+  if (result.status !== 0 && failOnError) process.exitCode = result.status || 1;
   return result;
 }
 
@@ -33,14 +33,14 @@ function assertClean() {
 }
 
 function npmVersion(name, currentVersion) {
-  const result = run("npm", ["view", `${name}@${currentVersion}`, "version"], { inherit: false });
+  const result = run("npm", ["view", `${name}@${currentVersion}`, "version"], { inherit: false, failOnError: false });
   return result.status === 0 ? result.stdout.trim() : "";
 }
 
 function tagExists(tag) {
-  const local = run("git", ["tag", "--list", tag], { inherit: false });
+  const local = run("git", ["tag", "--list", tag], { inherit: false, failOnError: false });
   if (local.status === 0 && local.stdout.trim()) return true;
-  const remote = run("git", ["ls-remote", "--tags", "origin", `refs/tags/${tag}`], { inherit: false });
+  const remote = run("git", ["ls-remote", "--tags", "origin", `refs/tags/${tag}`], { inherit: false, failOnError: false });
   return remote.status === 0 && Boolean(remote.stdout.trim());
 }
 
@@ -79,8 +79,11 @@ function release(args) {
   }
   const staged = run("git", ["add", "package.json", "package-lock.json"]);
   if (staged.status !== 0) return staged;
-  const committed = run("git", ["commit", "-m", `Release ${name} v${currentVersion}`]);
-  if (committed.status !== 0) return committed;
+  const stagedChanges = spawnSync("git", ["diff", "--cached", "--quiet"], { stdio: "ignore" });
+  if (stagedChanges.status !== 0) {
+    const committed = run("git", ["commit", "-m", `Release ${name} v${currentVersion}`]);
+    if (committed.status !== 0) return committed;
+  }
   const tagged = run("git", ["tag", `v${currentVersion}`]);
   if (tagged.status !== 0) return tagged;
   return run("git", ["push", "origin", "main", `v${currentVersion}`]);

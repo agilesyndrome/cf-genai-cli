@@ -1,5 +1,6 @@
 import { checkConfig, checkD1, migrateD1, refreshLocalD1, refreshStagingD1, statusD1 } from "./d1.js";
 import { runProjectCommand } from "./project.js";
+import { runVersionCommand } from "./version.js";
 
 const usage = `Usage:
   cf-genai check|test|build|ci
@@ -7,6 +8,7 @@ const usage = `Usage:
   cf-genai release [--type patch|minor|major]
   cf-genai publish:first
   cf-genai status
+  cf-genai version
   cf-genai d1 refresh local|staging [options]
   cf-genai d1 migrate local|staging|production [options]
   cf-genai d1 status local|staging|production [options]
@@ -64,6 +66,7 @@ function parseOptions(args, env = process.env) {
 }
 
 export async function main(args = process.argv.slice(2), env = process.env) {
+  if (args[0] === "version") return runVersionCommand();
   const projectCommand = args[0];
   if (["check", "test", "build", "ci", "dev", "release", "publish:first", "status"].includes(projectCommand)) {
     const result = runProjectCommand(projectCommand, args.slice(1));
