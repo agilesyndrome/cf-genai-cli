@@ -1,28 +1,17 @@
 # Releasing
 
-## One-time bootstrap
-
-The package must exist on npm before npm allows a Trusted Publisher to be
-configured. From this directory, run the initial interactive publish:
+The CLI repository runs its shared commands from source:
 
 ```sh
-npm publish --access public --provenance
+node bin/cf-genai.js ci
+node bin/cf-genai.js release
 ```
 
-Complete npm's account/2FA prompt. This publishes the version currently in
-`package.json`.
+`release` requires a clean tree, bumps the patch version when the current
+version or tag is already consumed, commits package metadata, creates the
+matching `v<version>` tag, and pushes both `main` and the tag.
 
-## GitHub Actions releases
-
-After the bootstrap publish, configure npm Trusted Publishing for this package:
-
-- Provider: GitHub Actions
-- Organization/user: `agilesyndrome`
-- Repository: `cf-genai-cli`
-- Workflow filename: `publish.yml`
-- Environment: blank
-- Allowed action: `npm publish`
-
-For later releases, bump `version` in `package.json`, commit and push it to
-`main`, then create and push a matching `v*` tag. The workflow publishes using
-GitHub OIDC; no npm token secret is required.
+For the one-time npm bootstrap, run `node bin/cf-genai.js publish:first` and
+complete npm's interactive prompts. Then configure npm Trusted Publishing for
+organization `agilesyndrome`, this repository, workflow `publish.yml`, and
+`npm publish`. Later releases use GitHub OIDC and require no npm token.

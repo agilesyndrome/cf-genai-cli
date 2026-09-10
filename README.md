@@ -3,6 +3,21 @@
 Safe operational commands for Cloudflare Worker repositories using Wrangler and
 D1. The refresh command surface contains only local and staging targets.
 
+It also provides shared project automation so dependent repositories do not
+need to duplicate their build and release logic:
+
+```sh
+cf-genai check
+cf-genai test
+cf-genai ci
+cf-genai dev
+cf-genai release
+```
+
+`dev` runs the repository's `npm run dev` script when present, otherwise it
+starts `wrangler dev`. `release` owns versioning, tagging, and pushing the
+release trigger used by GitHub Actions.
+
 ```sh
 cf-genai d1 refresh local
 cf-genai d1 refresh staging --yes
