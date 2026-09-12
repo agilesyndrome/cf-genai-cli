@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { rm, writeFile } from "node:fs/promises";
 import { clearSql, parseJsonRows, stripInternalRows, targetArgs } from "../src/d1.js";
 import { main } from "../src/cli.js";
 
@@ -39,5 +40,11 @@ test("initial publish requires explicit human confirmation", async () => {
 });
 
 test("release dry-run still protects dirty trees", async () => {
-  await assert.rejects(() => main(["release", "--dry-run"]), /Working tree must be clean before a release/);
+  const marker = ".release-safety-test-" + process.pid + ".tmp";
+  await writeFile(marker, "");
+  try {
+    await assert.rejects(() => main(["release", "--dry-run"]), /Working tree must be clean before a release/);
+  } finally {
+    await rm(marker, { force: true });
+  }
 });
