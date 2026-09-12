@@ -47,3 +47,8 @@ op run --env-file=.env.op -- cf-genai d1 refresh local
 Production migration requires `--confirm-production`. Remote staging refresh
 requires `--yes`. `config check` runs a Wrangler deploy dry-run. No production
 refresh or backup operation is implemented.
+Operational status can be read directly from the current site directory through Wrangler (no CLI login prompt):
+  cf-genai healthcheck:list --env local
+  cf-genai healthcheck:list --env staging
+  cf-genai circuit-breaker:list --env prod
+  cf-genai circuit-breaker:set llm:openai-models on --env staging
