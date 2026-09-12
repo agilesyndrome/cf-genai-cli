@@ -7,8 +7,8 @@ import { runVersionCommand } from "./version.js";
 const usage = `Usage:
   cf-genai check|test|build|ci
   cf-genai dev [options]
-  cf-genai release [--type patch|minor|major]
-  cf-genai publish:first
+  cf-genai release --confirm-release [--type patch|minor|major]
+  cf-genai publish:first --confirm-publish
   cf-genai status
   cf-genai version
   cf-genai d1 refresh local|staging [options]
@@ -29,7 +29,9 @@ Options:
   --env VALUE                 D1 environment alias: local, staging, or prod
   --wrangler COMMAND          Wrangler command (default: npx wrangler)
   --yes                       Confirm a remote staging refresh
-  --confirm-production        Explicitly permit production migration
+  --confirm-production        Explicitly permit production migration or breaker changes
+  --confirm-release            Confirm commit/tag/publish release operations
+  --confirm-publish            Confirm initial direct npm publishing
   --help                      Show this help
 `;
 
