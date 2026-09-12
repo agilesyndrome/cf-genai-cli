@@ -76,6 +76,8 @@ export function runProjectCommand(command, args = []) {
   }
   if (command === "publish:first") {
     assertFlag(args, "--confirm-publish", "Initial npm publishing is irreversible and requires explicit human confirmation.");
+    assertClean();
+    assertMainIsSynchronized();
     const name = packageName();
     const currentVersion = version();
     if (npmVersion(name, currentVersion)) throw new Error(`${name}@${currentVersion} is already published.`);
@@ -87,15 +89,21 @@ export function runProjectCommand(command, args = []) {
 }
 
 function release(args) {
-  assertFlag(args, "--confirm-release", "A release requires explicit human confirmation because it creates a commit, tag, and npm publish trigger.");
+  const dryRun = args.includes("--dry-run");
+  if (!dryRun) assertFlag(args, "--confirm-release", "A release requires explicit human confirmation because it creates a commit, tag, and npm publish trigger.");
   assertClean();
   assertMainIsSynchronized();
   const name = packageName();
   let currentVersion = version();
-  if (npmVersion(name, currentVersion) || tagExists(`v${currentVersion}`)) {
-    const typeIndex = args.indexOf("--type");
-    const type = typeIndex >= 0 ? args[typeIndex + 1] : "patch";
-    if (!["patch", "minor", "major"].includes(type)) throw new Error("--type must be patch, minor, or major.");
+  const typeIndex = args.indexOf("--type");
+  const type = typeIndex >= 0 ? args[typeIndex + 1] : "patch";
+  if (!["patch", "minor", "major"].includes(type)) throw new Error("--type must be patch, minor, or major.");
+  const consumed = Boolean(npmVersion(name, currentVersion) || tagExists(`v${currentVersion}`));
+  if (dryRun) {
+    console.log(`Dry run: ${name}@${currentVersion}${consumed ? ` would bump ${type}` : " is ready to release"}. Main is synchronized and no changes were made.`);
+    return;
+  }
+  if (consumed) {
     const bumped = run("npm", ["version", type, "--no-git-tag-version"]);
     if (bumped.status !== 0) return bumped;
     currentVersion = version();

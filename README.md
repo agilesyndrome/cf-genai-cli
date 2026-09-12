@@ -12,6 +12,7 @@ cf-genai test
 cf-genai ci
 cf-genai dev
 cf-genai release --confirm-release
+cf-genai release --dry-run
 cf-genai version
 ```
 
@@ -45,7 +46,8 @@ op run --env-file=.env.op -- cf-genai d1 refresh local
 ```
 
 Production migration requires `--confirm-production`. Remote staging refresh
-requires `--yes`. Releases require `--confirm-release`; the CLI verifies a
+requires `--yes`. Releases require `--confirm-release` (or can be inspected
+with `--dry-run`); the CLI verifies a
 clean checkout on `main`, fetches and compares `origin/main`, pushes and
 verifies the release commit before creating the tag, and only then pushes the
 tag that triggers npm publishing. Initial direct publishing requires

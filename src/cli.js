@@ -7,7 +7,7 @@ import { runVersionCommand } from "./version.js";
 const usage = `Usage:
   cf-genai check|test|build|ci
   cf-genai dev [options]
-  cf-genai release --confirm-release [--type patch|minor|major]
+  cf-genai release [--confirm-release] [--dry-run] [--type patch|minor|major]
   cf-genai publish:first --confirm-publish
   cf-genai status
   cf-genai version
@@ -32,6 +32,7 @@ Options:
   --confirm-production        Explicitly permit production migration or breaker changes
   --confirm-release            Confirm commit/tag/publish release operations
   --confirm-publish            Confirm initial direct npm publishing
+  --dry-run                    Show release checks without changing Git or npm
   --help                      Show this help
 `;
 

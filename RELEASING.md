@@ -5,6 +5,7 @@ The CLI repository runs its shared commands from source:
 ```sh
 node bin/cf-genai.js ci
 node bin/cf-genai.js release --confirm-release
+node bin/cf-genai.js release --dry-run
 ```
 
 `release` requires explicit human confirmation and a clean checkout on `main`.

@@ -37,3 +37,7 @@ test("release requires explicit human confirmation before inspecting or changing
 test("initial publish requires explicit human confirmation", async () => {
   await assert.rejects(() => main(["publish:first"]), /requires explicit human confirmation/);
 });
+
+test("release dry-run still protects dirty trees", async () => {
+  await assert.rejects(() => main(["release", "--dry-run"]), /Working tree must be clean before a release/);
+});
