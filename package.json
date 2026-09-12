@@ -12,7 +12,7 @@
     "README.md"
   ],
   "scripts": {
-    "check": "node --check bin/cf-genai.js && node --check src/cli.js && node --check src/d1.js && node --check src/project.js && node --check src/version.js",
+    "check": "node --check bin/cf-genai.js && node --check src/cli.js && node --check src/d1.js && node --check src/operations.js && node --check src/project.js && node --check src/version.js",
     "test": "node --test tests/*.test.mjs",
     "build": "npm run check && npm test && npm pack --dry-run"
   },

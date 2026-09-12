@@ -11,7 +11,7 @@ cf-genai check
 cf-genai test
 cf-genai ci
 cf-genai dev
-cf-genai release
+cf-genai release --confirm-release
 cf-genai version
 ```
 
@@ -45,8 +45,12 @@ op run --env-file=.env.op -- cf-genai d1 refresh local
 ```
 
 Production migration requires `--confirm-production`. Remote staging refresh
-requires `--yes`. `config check` runs a Wrangler deploy dry-run. No production
-refresh or backup operation is implemented.
+requires `--yes`. Releases require `--confirm-release`; the CLI verifies a
+clean checkout on `main`, fetches and compares `origin/main`, pushes and
+verifies the release commit before creating the tag, and only then pushes the
+tag that triggers npm publishing. Initial direct publishing requires
+`--confirm-publish`. `config check` runs a Wrangler deploy dry-run. No
+production refresh or backup operation is implemented.
 Operational status can be read directly from the current site directory through Wrangler (no CLI login prompt):
   cf-genai healthcheck:list --env local
   cf-genai healthcheck:list --env staging

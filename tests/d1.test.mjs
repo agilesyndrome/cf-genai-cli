@@ -29,3 +29,11 @@ test("production refresh is absent from the command grammar", async () => {
 test("production migration requires an explicit confirmation", async () => {
   await assert.rejects(() => main(["d1", "migrate", "production"]), /requires --confirm-production/);
 });
+
+test("release requires explicit human confirmation before inspecting or changing git", async () => {
+  await assert.rejects(() => main(["release"]), /requires explicit human confirmation/);
+});
+
+test("initial publish requires explicit human confirmation", async () => {
+  await assert.rejects(() => main(["publish:first"]), /requires explicit human confirmation/);
+});

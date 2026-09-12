@@ -32,6 +32,26 @@ function assertClean() {
   if (result.stdout.trim()) throw new Error("Working tree must be clean before a release.");
 }
 
+function output(command, args) {
+  const result = run(command, args, { inherit: false, failOnError: false });
+  if (result.status !== 0) throw new Error(`${command} ${args.join(" ")} failed.`);
+  return result.stdout.trim();
+}
+
+function assertMainIsSynchronized() {
+  const branch = output("git", ["branch", "--show-current"]);
+  if (branch !== "main") throw new Error(`Releases must run from main (currently on ${branch || "detached HEAD"}).`);
+  const fetched = run("git", ["fetch", "origin", "main", "--tags"]);
+  if (fetched.status !== 0) throw new Error("Unable to fetch origin/main; release stopped before changing anything.");
+  const local = output("git", ["rev-parse", "main"]);
+  const remote = output("git", ["rev-parse", "origin/main"]);
+  if (local !== remote) throw new Error("Local main does not match origin/main; push or reconcile it before releasing.");
+}
+
+function assertFlag(args, flag, message) {
+  if (!args.includes(flag)) throw new Error(`${message} Re-run with ${flag}.`);
+}
+
 function npmVersion(name, currentVersion) {
   const result = run("npm", ["view", `${name}@${currentVersion}`, "version"], { inherit: false, failOnError: false });
   return result.status === 0 ? result.stdout.trim() : "";
@@ -55,6 +75,7 @@ export function runProjectCommand(command, args = []) {
     return run("npx", ["wrangler", "dev", ...forwarded]);
   }
   if (command === "publish:first") {
+    assertFlag(args, "--confirm-publish", "Initial npm publishing is irreversible and requires explicit human confirmation.");
     const name = packageName();
     const currentVersion = version();
     if (npmVersion(name, currentVersion)) throw new Error(`${name}@${currentVersion} is already published.`);
@@ -66,7 +87,9 @@ export function runProjectCommand(command, args = []) {
 }
 
 function release(args) {
+  assertFlag(args, "--confirm-release", "A release requires explicit human confirmation because it creates a commit, tag, and npm publish trigger.");
   assertClean();
+  assertMainIsSynchronized();
   const name = packageName();
   let currentVersion = version();
   if (npmVersion(name, currentVersion) || tagExists(`v${currentVersion}`)) {
@@ -84,9 +107,14 @@ function release(args) {
     const committed = run("git", ["commit", "-m", `Release ${name} v${currentVersion}`]);
     if (committed.status !== 0) return committed;
   }
+  const pushedMain = run("git", ["push", "origin", "main"]);
+  if (pushedMain.status !== 0) return pushedMain;
+  const localHead = output("git", ["rev-parse", "HEAD"]);
+  const remoteHead = output("git", ["ls-remote", "origin", "refs/heads/main"]).split(/\s+/)[0];
+  if (localHead !== remoteHead) throw new Error("origin/main could not be verified at the release commit; tag was not created.");
   const tagged = run("git", ["tag", `v${currentVersion}`]);
   if (tagged.status !== 0) return tagged;
-  return run("git", ["push", "origin", "main", `v${currentVersion}`]);
+  return run("git", ["push", "origin", `refs/tags/v${currentVersion}`]);
 }
 
 function releaseStatus() {
