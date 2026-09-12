@@ -1,4 +1,5 @@
 import { checkConfig, checkD1, migrateD1, refreshLocalD1, refreshStagingD1, statusD1 } from "./d1.js";
+import { runUserCommand } from "./users.js";
 import { runProjectCommand } from "./project.js";
 import { runVersionCommand } from "./version.js";
 
@@ -14,6 +15,7 @@ const usage = `Usage:
   cf-genai d1 status local|staging|production [options]
   cf-genai d1 check local|staging|production [options]
   cf-genai config check [options]
+  cf-genai user list|get|update [username] [options]
 
 Options:
   --database NAME             D1 binding or database name (default: DB)
@@ -40,6 +42,10 @@ function parseOptions(args, env = process.env) {
     wranglerCommand: splitCommand(env.CF_GENAI_WRANGLER || "npx wrangler"),
     yes: false,
     confirmProduction: false,
+    target: env.CF_GENAI_TARGET || "local",
+    roles: undefined,
+    scopes: undefined,
+    groups: undefined,
   };
   const positional = [];
   for (let index = 0; index < args.length; index += 1) {
@@ -52,7 +58,7 @@ function parseOptions(args, env = process.env) {
       const names = {
         database: "database", "production-database": "productionDatabase",
         "production-env": "productionEnv", "staging-env": "stagingEnv",
-        config: "config", wrangler: "wrangler",
+        config: "config", wrangler: "wrangler", target: "target", roles: "roles", scopes: "scopes", groups: "groups",
       };
       const optionName = names[key];
       if (!optionName) throw new Error(`Unknown option: ${arg}`);
@@ -66,6 +72,7 @@ function parseOptions(args, env = process.env) {
 }
 
 export async function main(args = process.argv.slice(2), env = process.env) {
+  if (args[0]?.startsWith("user:")) args = ["user", args[0].slice(5), ...args.slice(1)];
   if (args[0] === "version") return runVersionCommand();
   const projectCommand = args[0];
   if (["check", "test", "build", "ci", "dev", "release", "publish:first", "status"].includes(projectCommand)) {
@@ -79,6 +86,7 @@ export async function main(args = process.argv.slice(2), env = process.env) {
     return;
   }
   const [domain, action, target] = options.positional;
+  if (domain === "user") return runUserCommand({ action, username: target, options });
   if (domain === "config" && action === "check") return checkConfig(options);
   if (domain !== "d1" || !["refresh", "migrate", "status", "check"].includes(action)) throw new Error(`Unknown command.\n\n${usage}`);
   if (!["local", "staging", "production"].includes(target)) throw new Error("Target must be local, staging, or production.");

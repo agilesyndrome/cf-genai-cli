@@ -83,7 +83,7 @@ function execute(wrangler, database, target, sqlFile, options) {
   run(wrangler, ["d1", "execute", database, ...targetArgs(target, options), "--file", sqlFile, "--yes", "--config", options.config], options);
 }
 
-function executeJson(wrangler, database, target, command, options) {
+export function executeJson(wrangler, database, target, command, options) {
   return run(wrangler, ["d1", "execute", database, ...targetArgs(target, options), "--command", command, "--json", "--config", options.config], { ...options, capture: true });
 }
 
