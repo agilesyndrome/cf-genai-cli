@@ -49,7 +49,7 @@ function assertMainIsSynchronized() {
 }
 
 function assertFlag(args, flag, message) {
-  if (!args.includes(flag)) throw new Error(`${message} Re-run with ${flag}.`);
+  if (!args.includes(flag) && !(flag === "--confirm-release" && args.includes("--confirm")) && !(flag === "--confirm-publish" && args.includes("--confirm"))) throw new Error(`${message} Re-run with ${flag}.`);
 }
 
 function npmVersion(name, currentVersion) {
@@ -76,7 +76,8 @@ export function runProjectCommand(command, args = []) {
   if (command === "build" || command === "ci") return run("npm", ["run", "build"]);
   if (command === "dev") {
     const scripts = packageJson().scripts || {};
-    return run(...devCommand({ hasScript: Boolean(scripts.dev), args }));
+    const [program, ...programArgs] = devCommand({ hasScript: Boolean(scripts.dev), args });
+    return run(program, programArgs);
   }
   if (command === "publish:first") {
     assertFlag(args, "--confirm-publish", "Initial npm publishing is irreversible and requires explicit human confirmation.");
@@ -92,8 +93,11 @@ export function runProjectCommand(command, args = []) {
   return null;
 }
 
+function publishFirst(args) { assertFlag(args, "--confirm-publish", "Initial npm publishing requires explicit confirmation."); assertClean(); assertMainIsSynchronized(); const name = packageName(); const currentVersion = version(); if (npmVersion(name, currentVersion)) throw new Error(name + "@" + currentVersion + " is already published."); return run("npm", ["publish", "--access", "public", "--provenance"]); }
+
 function release(args) {
   const dryRun = args.includes("--dry-run");
+  if (args.includes("--first")) return publishFirst(args);
   if (!dryRun) assertFlag(args, "--confirm-release", "A release requires explicit human confirmation because it creates a commit, tag, and npm publish trigger.");
   assertClean();
   assertMainIsSynchronized();

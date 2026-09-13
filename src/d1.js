@@ -142,6 +142,22 @@ export function checkD1({ target, database, options }) {
   console.log(`${target} D1 integrity checks passed.`);
 }
 
+export function backupD1({ target, database, options }) {
+  if (!options.output) throw new Error("Backup requires --output PATH.");
+  if (target === "production" && !options.confirmProduction) throw new Error("Production backup requires --confirm-production.");
+  run(options.wranglerCommand, ["d1", "export", database, ...targetArgs(target, options), "--output", options.output, "--skip-confirmation", "--config", options.config], options);
+  console.log("Backed up " + database + " (" + target + ") to " + options.output);
+}
+
+export async function restoreD1({ target, database, options }) {
+  if (!options.file) throw new Error("Restore requires --file PATH.");
+  try { await readFile(options.file); } catch { throw new Error("Restore file not found: " + options.file); }
+  if (target !== "local" && !options.yes) throw new Error("Remote restore replaces data; rerun with --yes.");
+  if (target === "production" && !options.confirmProduction) throw new Error("Production restore requires --confirm-production.");
+  execute(options.wranglerCommand, database, target, options.file, options);
+  console.log("Restored " + database + " (" + target + ") from " + options.file);
+}
+
 export function checkConfig(options) {
   run(options.wranglerCommand, ["deploy", "--dry-run", "--config", options.config], options);
 }

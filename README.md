@@ -14,6 +14,8 @@ cf-genai dev
 cf-genai release --confirm-release
 cf-genai release --dry-run
 cf-genai version
+  cf-genai status
+  cf-genai status --json
 ```
 
 `dev` runs through `op run --env-file=.env.dev --`, using the repository's
@@ -52,10 +54,23 @@ with `--dry-run`); the CLI verifies a
 clean checkout on `main`, fetches and compares `origin/main`, pushes and
 verifies the release commit before creating the tag, and only then pushes the
 tag that triggers npm publishing. Initial direct publishing requires
-`--confirm-publish`. `config check` runs a Wrangler deploy dry-run. No
-production refresh or backup operation is implemented.
+`--confirm-publish`. `config check` runs a Wrangler deploy dry-run. Production refresh remains intentionally unavailable; backups and restores are available with explicit file paths.
 Operational status can be read directly from the current site directory through Wrangler (no CLI login prompt):
   cf-genai healthcheck:list --env local
   cf-genai healthcheck:list --env staging
   cf-genai circuit-breaker:list --env prod
   cf-genai circuit-breaker:set llm:openai-models on --env staging
+The standardized admin surface mirrors cf-genai-base and uses Wrangler authentication from the current machine:
+  cf-genai admin status --env staging
+  cf-genai admin features --env staging
+  cf-genai admin users --env staging
+  cf-genai admin scopes --env staging
+  cf-genai admin groups --env staging
+  cf-genai admin healthchecks --env staging
+  cf-genai admin circuit-breakers --env staging
+  cf-genai healthchecks set llm:provider red --env staging
+  cf-genai circuit-breakers set llm:provider tripped --env staging
+Back up and restore a complete D1 database with explicit files:
+  cf-genai d1 backup production --output ./backup.sql --confirm-production
+  cf-genai d1 restore staging --file ./backup.sql --yes
+`release --first` replaces the old `publish:first` spelling. The old spelling remains supported for scripts. `release --confirm` is the concise form of `--confirm-release`.
