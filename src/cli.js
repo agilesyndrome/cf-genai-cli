@@ -8,7 +8,7 @@ import { siteStatus } from "./status.js";
 const usage = `Usage:
   cf-genai check|test|build|ci
   cf-genai dev [options]
-  cf-genai release [--confirm] [--dry-run] [--type patch|minor|major]
+  cf-genai release [--confirm] [--first] [--dry-run] [--type patch|minor|major]
     cf-genai status [--env local|staging|production] [--json]
   cf-genai version
   cf-genai d1 refresh|backup|restore|migrate|status|check local|staging|production [options]

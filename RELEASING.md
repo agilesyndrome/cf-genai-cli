@@ -5,6 +5,7 @@ The CLI repository runs its shared commands from source:
 ```sh
 node bin/cf-genai.js ci
 node bin/cf-genai.js release --confirm
+node bin/cf-genai.js release --first --confirm
 node bin/cf-genai.js release --dry-run
 ```
 
@@ -15,3 +16,6 @@ package metadata, pushes and verifies `main`, then creates and pushes the
 matching `v<version>` tag. The tag starts the GitHub Actions publish workflow.
 
 The release tag triggers `publish.yml`, which verifies the package and publishes it to npm with GitHub OIDC and provenance.
+
+For a package that has not yet been published, `release --first --confirm`
+publishes the current version directly with public access and npm provenance.

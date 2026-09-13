@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -108,6 +108,8 @@ async function refreshD1(target, { database, productionDatabase, options }) {
     const exported = await readFile(exportPath, "utf8");
     await writeFile(importPath, `${clearSql(tables)}${stripInternalRows(exported)}`);
     execute(options.wranglerCommand, database, target, importPath, options);
+    await mkdir(options.cwd || process.cwd(), { recursive: true });
+    await writeFile(join(options.cwd || process.cwd(), ".cf-genai-last-prod-refresh"), new Date().toISOString() + "\n");
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

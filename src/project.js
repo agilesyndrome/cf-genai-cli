@@ -1,5 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { join } from "node:path";
+import { migrateD1, shellCommand } from "./d1.js";
 
 const packagePath = "package.json";
 
@@ -70,18 +72,60 @@ export function devCommand({ hasScript, args = [] }) {
   return ["op", "run", "--env-file=.env.dev", "--", ...command];
 }
 
+export function lastProdRefresh({ cwd = process.cwd(), env = process.env } = {}) {
+  if (env.CF_GENAI_LAST_PROD_REFRESH) return env.CF_GENAI_LAST_PROD_REFRESH;
+  try {
+    return readFileSync(join(cwd, ".cf-genai-last-prod-refresh"), "utf8").trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+function printDevDataStatus(options = {}) {
+  const refreshed = lastProdRefresh(options);
+  console.log("Last production data refresh: " + (refreshed || "unknown"));
+  console.log("To refresh data from prod run: cf-genai d1 refresh local");
+}
+
+function applyDevMigrations(env = process.env) {
+  if (!existsSync("migrations")) return;
+  console.log("Applying local D1 migrations...");
+  migrateD1({
+    target: "local",
+    database: env.CF_GENAI_DATABASE || "DB",
+    options: {
+      config: env.CF_GENAI_WRANGLER_CONFIG || "wrangler.jsonc",
+      wranglerCommand: ["op", "run", "--env-file=.env.dev", "--", ...shellCommand(env.CF_GENAI_WRANGLER || "npx wrangler")],
+      env,
+    },
+  });
+}
+
 export function runProjectCommand(command, args = []) {
   if (command === "check") return run("npm", ["run", "check"]);
   if (command === "test") return run("npm", ["test"]);
   if (command === "build" || command === "ci") return run("npm", ["run", "build"]);
   if (command === "dev") {
+    printDevDataStatus();
+    applyDevMigrations();
     const scripts = packageJson().scripts || {};
     const [program, ...programArgs] = devCommand({ hasScript: Boolean(scripts.dev), args });
     return run(program, programArgs);
   }
+  if (command === "release" && args.includes("--first")) return publishFirst(args);
   if (command === "release") return release(args);
   if (command === "status") return releaseStatus();
   return null;
+}
+
+function publishFirst(args) {
+  assertFlag(args, "--confirm", "Initial npm publishing is irreversible and requires explicit human confirmation.");
+  assertClean();
+  assertMainIsSynchronized();
+  const name = packageName();
+  const currentVersion = version();
+  if (npmVersion(name, currentVersion)) throw new Error(`${name}@${currentVersion} is already published.`);
+  return run("npm", ["publish", "--access", "public", "--provenance"]);
 }
 
 function release(args) {

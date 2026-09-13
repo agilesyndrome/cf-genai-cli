@@ -12,6 +12,7 @@ cf-genai test
 cf-genai ci
 cf-genai dev
 cf-genai release --confirm
+cf-genai release --first --confirm
 cf-genai release --dry-run
 cf-genai version
   cf-genai status
@@ -24,6 +25,10 @@ loads all `.env.dev` variables and resolves any `op://` values automatically.
 `release` owns versioning, tagging, and pushing the release trigger used by
 GitHub Actions. `version` shows the installed CLI version and the latest npm
 version, with an upgrade command when one is available.
+
+For the initial npm publication only, use `cf-genai release --first --confirm`.
+It publishes the current package once with public access and npm provenance;
+subsequent releases should use the normal tag-triggered workflow.
 
 ```sh
 cf-genai d1 refresh local
