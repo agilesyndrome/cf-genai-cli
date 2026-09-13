@@ -3,6 +3,16 @@ import assert from "node:assert/strict";
 import { rm, writeFile } from "node:fs/promises";
 import { clearSql, parseJsonRows, stripInternalRows, targetArgs } from "../src/d1.js";
 import { main } from "../src/cli.js";
+import { devCommand } from "../src/project.js";
+
+test("dev command loads .env.dev through 1Password", () => {
+  assert.deepEqual(devCommand({ hasScript: true, args: ["--", "--host", "127.0.0.1"] }), [
+    "op", "run", "--env-file=.env.dev", "--", "npm", "run", "dev", "--host", "127.0.0.1",
+  ]);
+  assert.deepEqual(devCommand({ hasScript: false }), [
+    "op", "run", "--env-file=.env.dev", "--", "npx", "wrangler", "dev",
+  ]);
+});
 
 test("target args select local or named remote environments", () => {
   assert.deepEqual(targetArgs("local", { stagingEnv: "staging" }), ["--local"]);

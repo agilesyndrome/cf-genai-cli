@@ -16,11 +16,12 @@ cf-genai release --dry-run
 cf-genai version
 ```
 
-`dev` runs the repository's `npm run dev` script when present, otherwise it
-starts `wrangler dev`. `release` owns versioning, tagging, and pushing the
-release trigger used by GitHub Actions. `version` shows the installed CLI
-version and the latest npm version, with an upgrade command when one is
-available.
+`dev` runs through `op run --env-file=.env.dev --`, using the repository's
+`npm run dev` script when present, otherwise starting `wrangler dev`. This
+loads all `.env.dev` variables and resolves any `op://` values automatically.
+`release` owns versioning, tagging, and pushing the release trigger used by
+GitHub Actions. `version` shows the installed CLI version and the latest npm
+version, with an upgrade command when one is available.
 
 ```sh
 cf-genai d1 refresh local

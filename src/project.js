@@ -64,15 +64,19 @@ function tagExists(tag) {
   return remote.status === 0 && Boolean(remote.stdout.trim());
 }
 
+export function devCommand({ hasScript, args = [] }) {
+  const forwarded = args[0] === "--" ? args.slice(1) : args;
+  const command = hasScript ? ["npm", "run", "dev", ...forwarded] : ["npx", "wrangler", "dev", ...forwarded];
+  return ["op", "run", "--env-file=.env.dev", "--", ...command];
+}
+
 export function runProjectCommand(command, args = []) {
   if (command === "check") return run("npm", ["run", "check"]);
   if (command === "test") return run("npm", ["test"]);
   if (command === "build" || command === "ci") return run("npm", ["run", "build"]);
   if (command === "dev") {
     const scripts = packageJson().scripts || {};
-    const forwarded = args[0] === "--" ? args.slice(1) : args;
-    if (scripts.dev) return run("npm", ["run", "dev", ...forwarded]);
-    return run("npx", ["wrangler", "dev", ...forwarded]);
+    return run(...devCommand({ hasScript: Boolean(scripts.dev), args }));
   }
   if (command === "publish:first") {
     assertFlag(args, "--confirm-publish", "Initial npm publishing is irreversible and requires explicit human confirmation.");
