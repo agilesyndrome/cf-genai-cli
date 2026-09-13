@@ -11,7 +11,7 @@ cf-genai check
 cf-genai test
 cf-genai ci
 cf-genai dev
-cf-genai release --confirm-release
+cf-genai release --confirm
 cf-genai release --dry-run
 cf-genai version
   cf-genai status
@@ -49,12 +49,11 @@ op run --env-file=.env.op -- cf-genai d1 refresh local
 ```
 
 Production migration requires `--confirm-production`. Remote staging refresh
-requires `--yes`. Releases require `--confirm-release` (or can be inspected
+requires `--yes`. Releases require `--confirm` (or can be inspected
 with `--dry-run`); the CLI verifies a
 clean checkout on `main`, fetches and compares `origin/main`, pushes and
 verifies the release commit before creating the tag, and only then pushes the
-tag that triggers npm publishing. Initial direct publishing requires
-`--confirm-publish`. `config check` runs a Wrangler deploy dry-run. Production refresh remains intentionally unavailable; backups and restores are available with explicit file paths.
+tag that triggers npm publishing. The release tag publishes the package through GitHub Actions with provenance. `config check` runs a Wrangler deploy dry-run. Production refresh remains intentionally unavailable; backups and restores are available with explicit file paths.
 Operational status can be read directly from the current site directory through Wrangler (no CLI login prompt):
   cf-genai healthcheck:list --env local
   cf-genai healthcheck:list --env staging
@@ -73,4 +72,4 @@ The standardized admin surface mirrors cf-genai-base and uses Wrangler authentic
 Back up and restore a complete D1 database with explicit files:
   cf-genai d1 backup production --output ./backup.sql --confirm-production
   cf-genai d1 restore staging --file ./backup.sql --yes
-`release --first` replaces the old `publish:first` spelling. The old spelling remains supported for scripts. `release --confirm` is the concise form of `--confirm-release`.
+`release` is the only release command. It creates the version commit and tag; the tag-triggered workflow publishes to npm.

@@ -29,9 +29,6 @@ Options:
   --yes                       Confirm a remote staging refresh
   --confirm-production        Explicitly permit production migration or breaker changes
   --confirm                    Confirm a destructive or release operation
-  --first                      Release the current version as the initial publish
-  --confirm-release             Compatibility alias for --confirm
-  --confirm-publish             Compatibility alias for --confirm --first
   --dry-run                    Show release checks without changing Git or npm
   --json                      Return machine-readable output
   --help                      Show this help
@@ -85,7 +82,7 @@ export async function main(args = process.argv.slice(2), env = process.env) {
   if (args[0]?.includes(":")) { const [domain, action] = args[0].split(":", 2); if (["user", "healthcheck", "healthchecks", "circuit-breaker", "circuit-breakers", "circuit"].includes(domain)) args = [domain, action, ...args.slice(1)]; }
   if (args[0] === "version") return runVersionCommand();
   const projectCommand = args[0];
-  if (["check", "test", "build", "ci", "dev", "release", "publish:first"].includes(projectCommand)) {
+  if (["check", "test", "build", "ci", "dev", "release"].includes(projectCommand)) {
     const result = runProjectCommand(projectCommand, args.slice(1));
     if (result === null) throw new Error(`Unknown command.\n\n${usage}`);
     return result;
