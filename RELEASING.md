@@ -18,4 +18,4 @@ matching `v<version>` tag. The tag starts the GitHub Actions publish workflow.
 The release tag triggers `publish.yml`, which verifies the package and publishes it to npm with GitHub OIDC and provenance.
 
 For a package that has not yet been published, `release --first --confirm`
-publishes the current version directly with public access and provenance disabled, allowing npm to prompt for your interactive 2FA code.
+checks npm authentication, starts `npm login` when needed, and publishes the current version directly with public access and provenance disabled, allowing npm to prompt for your interactive 2FA code.

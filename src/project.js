@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { migrateD1, shellCommand } from "./d1.js";
 
 const packagePath = "package.json";
+const npmRegistry = "https://registry.npmjs.org";
 
 function run(command, args, { inherit = true, failOnError = true } = {}) {
   const result = spawnSync(command, args, {
@@ -57,6 +58,41 @@ function assertFlag(args, flag, message) {
 function npmVersion(name, currentVersion) {
   const result = run("npm", ["view", `${name}@${currentVersion}`, "version"], { inherit: false, failOnError: false });
   return result.status === 0 ? result.stdout.trim() : "";
+}
+
+function packageScope(name) {
+  return name.startsWith("@") ? name.split("/", 1)[0] : "";
+}
+
+export function isNpmAuthenticationFailure(output = "") {
+  return /\b(?:E401|ENEEDAUTH)\b|401\s+Unauthorized|auth(?:entication|entication token)?[^\n]*(?:required|invalid|expired)|not logged in|must be logged in/i.test(output);
+}
+
+function ensureNpmLogin(name) {
+  console.log("Checking npm authentication for " + name + "...");
+  const whoami = run("npm", ["whoami", "--registry", npmRegistry], { inherit: false, failOnError: false });
+  if (whoami.status === 0 && whoami.stdout.trim()) {
+    console.log("npm authentication OK (" + whoami.stdout.trim() + ").");
+    return;
+  }
+
+  const failure = whoami.stdout + "\n" + whoami.stderr;
+  if (!isNpmAuthenticationFailure(failure)) {
+    throw new Error("Unable to verify npm authentication. Check " + npmRegistry + " and try again.");
+  }
+
+  const scope = packageScope(name);
+  console.log("npm authentication is missing or invalid; starting npm login...");
+  const loginArgs = ["login", "--registry", npmRegistry];
+  if (scope) loginArgs.push("--scope", scope);
+  const login = run("npm", loginArgs, { failOnError: false });
+  if (login.status !== 0) throw new Error("npm login failed or was cancelled. Re-run the release after logging in.");
+
+  const verified = run("npm", ["whoami", "--registry", npmRegistry], { inherit: false, failOnError: false });
+  if (verified.status !== 0 || !verified.stdout.trim()) {
+    throw new Error("npm login completed, but npm authentication could not be verified. Run npm whoami and try again.");
+  }
+  console.log("npm authentication OK (" + verified.stdout.trim() + ").");
 }
 
 function tagExists(tag) {
@@ -124,7 +160,9 @@ function publishFirst(args) {
   assertMainIsSynchronized();
   const name = packageName();
   const currentVersion = version();
-  if (npmVersion(name, currentVersion)) throw new Error(`${name}@${currentVersion} is already published.`);
+  ensureNpmLogin(name);
+  if (npmVersion(name, currentVersion)) throw new Error(name + "@" + currentVersion + " is already published.");
+  console.log("Publishing " + name + "@" + currentVersion + " to npm...");
   return run("npm", ["publish", "--access", "public", "--provenance=false"]);
 }
 

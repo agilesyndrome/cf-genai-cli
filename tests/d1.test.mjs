@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { rm, writeFile } from "node:fs/promises";
 import { clearSql, parseJsonRows, stripInternalRows, targetArgs } from "../src/d1.js";
 import { main } from "../src/cli.js";
-import { devCommand } from "../src/project.js";
+import { devCommand, isNpmAuthenticationFailure } from "../src/project.js";
 
 test("dev command loads .env.dev through 1Password", () => {
   assert.deepEqual(devCommand({ hasScript: true, args: ["--", "--host", "127.0.0.1"] }), [
@@ -47,6 +47,11 @@ test("release requires explicit human confirmation before inspecting or changing
 
 test("initial publish requires explicit human confirmation", async () => {
   await assert.rejects(() => main(["release", "--first"]), /Initial npm publishing is irreversible.*--confirm/)
+});
+
+test("npm authentication failures are recognized", () => {
+  assert.equal(isNpmAuthenticationFailure("npm error code E401\nnpm error 401 Unauthorized"), true);
+  assert.equal(isNpmAuthenticationFailure("npm error code E404\nnpm error 404 Not Found"), false);
 });
 
 test("publish command is removed", async () => {
