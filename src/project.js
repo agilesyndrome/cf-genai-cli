@@ -1,10 +1,12 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { migrateD1, shellCommand } from "./d1.js";
 
 const packagePath = "package.json";
 const npmRegistry = "https://registry.npmjs.org";
+const DATA_ACCESS_EXTENSIONS = new Set([".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx"]);
+const DATA_ACCESS_DIRECT = /\b(?:env|environment)\s*\.\s*DB\s*\.\s*prepare\s*\(|\bDB\s*\.\s*prepare\s*\(/;
 
 function run(command, args, { inherit = true, failOnError = true } = {}) {
   const result = spawnSync(command, args, {
@@ -19,6 +21,37 @@ function run(command, args, { inherit = true, failOnError = true } = {}) {
 function packageJson() {
   if (!existsSync(packagePath)) throw new Error("package.json was not found in the current directory.");
   return JSON.parse(readFileSync(packagePath, "utf8"));
+}
+
+function isCfGenaiProject(cwd) {
+  if (!existsSync(join(cwd, packagePath))) return false;
+  const name = JSON.parse(readFileSync(join(cwd, packagePath), "utf8")).name || "";
+  return name.startsWith("@agilesyndrome/cf-genai-") || name.startsWith("cf-genai-") || cwd.split(/[\\/]/).pop()?.startsWith("cf-genai-");
+}
+
+function sourceFiles(directory, files = []) {
+  if (!existsSync(directory)) return files;
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    if (["node_modules", ".git", ".wrangler", "dist", "coverage"].includes(entry.name)) continue;
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) sourceFiles(path, files);
+    else if (DATA_ACCESS_EXTENSIONS.has(path.slice(path.lastIndexOf(".")))) files.push(path);
+  }
+  return files;
+}
+
+export function dataAccessLint({ cwd = process.cwd() } = {}) {
+  if (!isCfGenaiProject(cwd)) return { skipped: true, violations: [] };
+  const roots = ["src", "app", "apps", "functions", "workers", "server"].map((root) => join(cwd, root)).filter((root) => existsSync(root));
+  const files = (roots.length ? roots : [cwd]).flatMap((root) => sourceFiles(root));
+  const violations = files
+    .filter((path) => !path.split(/[\\/]/).includes("tests"))
+    .flatMap((path) => String(readFileSync(path, "utf8")).split(/\r?\n/).flatMap((line, index) => DATA_ACCESS_DIRECT.test(line) ? [{ path, line: index + 1, text: line.trim() }] : []));
+  if (violations.length) {
+    const details = violations.map((item) => `  ${item.path}:${item.line}: ${item.text}`).join("\n");
+    throw new Error(`Direct D1 access is not allowed in cf-genai domain source. Use state.data scoped readers instead.\n${details}`);
+  }
+  return { skipped: false, violations };
 }
 
 function packageName() {
@@ -138,7 +171,8 @@ function applyDevMigrations(env = process.env) {
 }
 
 export function runProjectCommand(command, args = []) {
-  if (command === "check") return run("npm", ["run", "check"]);
+  if (command === "check") { dataAccessLint(); return run("npm", ["run", "check"]); }
+  if (command === "lint") { if (args.length && args[0] !== "data-access") throw new Error("Unknown lint target. Use data-access."); return dataAccessLint(); }
   if (command === "test") return run("npm", ["test"]);
   if (command === "build" || command === "ci") return run("npm", ["run", "build"]);
   if (command === "dev") {

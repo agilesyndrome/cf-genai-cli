@@ -8,6 +8,7 @@ need to duplicate their build and release logic:
 
 ```sh
 cf-genai check
+cf-genai lint data-access
 cf-genai test
 cf-genai ci
 cf-genai dev
@@ -22,6 +23,9 @@ cf-genai version
 `dev` runs through `op run --env-file=.env.dev --`, using the repository's
 `npm run dev` script when present, otherwise starting `wrangler dev`. This
 loads all `.env.dev` variables and resolves any `op://` values automatically.
+`check` also rejects direct `env.DB.prepare(...)` and `DB.prepare(...)` calls
+in `cf-genai-*` application source; domain code must use the scoped data reader
+provided by `cf-genai-base`. Tests and migrations are excluded from this lint.
 `release` owns versioning, tagging, and pushing the release trigger used by
 GitHub Actions. `version` shows the installed CLI version and the latest npm
 version, with an upgrade command when one is available.

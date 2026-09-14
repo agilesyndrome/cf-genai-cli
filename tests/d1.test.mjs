@@ -1,9 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { clearSql, parseJsonRows, stripInternalRows, targetArgs } from "../src/d1.js";
 import { main } from "../src/cli.js";
-import { devCommand, isNpmAuthenticationFailure } from "../src/project.js";
+import { dataAccessLint, devCommand, isNpmAuthenticationFailure } from "../src/project.js";
 
 test("dev command loads .env.dev through 1Password", () => {
   assert.deepEqual(devCommand({ hasScript: true, args: ["--", "--host", "127.0.0.1"] }), [
@@ -12,6 +14,18 @@ test("dev command loads .env.dev through 1Password", () => {
   assert.deepEqual(devCommand({ hasScript: false }), [
     "op", "run", "--env-file=.env.dev", "--", "npx", "wrangler", "dev",
   ]);
+});
+
+test("data access lint detects direct D1 calls in cf-genai source", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "cf-genai-lint-"));
+  try {
+    await mkdir(join(cwd, "src"));
+    await writeFile(join(cwd, "package.json"), JSON.stringify({ name: "@agilesyndrome/cf-genai-cookbook" }));
+    await writeFile(join(cwd, "src", "recipe.js"), "export const rows = env.DB.prepare('SELECT 1');\n");
+    assert.throws(() => dataAccessLint({ cwd }), /Direct D1 access is not allowed/);
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
 });
 
 test("target args select local or named remote environments", () => {
@@ -59,7 +73,7 @@ test("publish command is removed", async () => {
 });
 
 test("release dry-run still protects dirty trees", async () => {
-  const marker = ".release-safety-test-" + process.pid + ".tmp";
+const marker = ".release-safety-test-" + process.pid + ".tmp";
   await writeFile(marker, "");
   try {
     await assert.rejects(() => main(["release", "--dry-run"]), /Working tree must be clean before a release/);

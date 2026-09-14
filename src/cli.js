@@ -7,6 +7,7 @@ import { siteStatus } from "./status.js";
 
 const usage = `Usage:
   cf-genai check|test|build|ci
+  cf-genai lint data-access
   cf-genai dev [options]
   cf-genai release [--confirm] [--first] [--dry-run] [--type patch|minor|major]
     cf-genai status [--env local|staging|production] [--json]
@@ -82,7 +83,7 @@ export async function main(args = process.argv.slice(2), env = process.env) {
   if (args[0]?.includes(":")) { const [domain, action] = args[0].split(":", 2); if (["user", "healthcheck", "healthchecks", "circuit-breaker", "circuit-breakers", "circuit"].includes(domain)) args = [domain, action, ...args.slice(1)]; }
   if (args[0] === "version") return runVersionCommand();
   const projectCommand = args[0];
-  if (["check", "test", "build", "ci", "dev", "release"].includes(projectCommand)) {
+  if (["check", "test", "build", "ci", "lint", "dev", "release"].includes(projectCommand)) {
     const result = runProjectCommand(projectCommand, args.slice(1));
     if (result === null) throw new Error(`Unknown command.\n\n${usage}`);
     return result;
