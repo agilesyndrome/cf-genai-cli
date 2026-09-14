@@ -27,7 +27,7 @@ GitHub Actions. `version` shows the installed CLI version and the latest npm
 version, with an upgrade command when one is available.
 
 For the initial npm publication only, use `cf-genai release --first --confirm`.
-It publishes the current package once with public access and npm provenance;
+It publishes the current package once with public access and provenance disabled so npm can prompt for your interactive 2FA code;
 subsequent releases should use the normal tag-triggered workflow.
 
 ```sh

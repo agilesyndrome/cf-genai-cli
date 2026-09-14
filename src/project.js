@@ -125,7 +125,7 @@ function publishFirst(args) {
   const name = packageName();
   const currentVersion = version();
   if (npmVersion(name, currentVersion)) throw new Error(`${name}@${currentVersion} is already published.`);
-  return run("npm", ["publish", "--access", "public", "--provenance"]);
+  return run("npm", ["publish", "--access", "public", "--provenance=false"]);
 }
 
 function release(args) {
