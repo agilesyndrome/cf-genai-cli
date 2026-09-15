@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { clearSql, parseJsonRows, stripInternalRows, targetArgs } from "../src/d1.js";
 import { main } from "../src/cli.js";
-import { dataAccessLint, devCommand, isNpmAuthenticationFailure, normalizeReleaseVersion, releaseWaitMinutes } from "../src/project.js";
+import { dataAccessLint, devCommand, isNpmAuthenticationFailure, normalizeReleaseVersion, releaseStatusDot, releaseStatusShouldContinue, releaseWaitMinutes } from "../src/project.js";
 
 test("dev command loads .env.dev through 1Password", () => {
   assert.deepEqual(devCommand({ hasScript: true, args: ["--", "--host", "127.0.0.1"] }), [
@@ -85,6 +85,23 @@ test("release status uses one shared five-minute default wait budget", () => {
   assert.equal(releaseWaitMinutes(["--wait=0"]), 0);
   assert.throws(() => releaseWaitMinutes(["--wait"]), /requires a number/);
   assert.throws(() => releaseWaitMinutes(["--wait", "-1"]), /non-negative/);
+});
+
+test("release status keeps waiting for npm after Actions passes", () => {
+  const checks = { github_actions: { state: "passed" }, npm: { state: "not_published" } };
+  assert.equal(releaseStatusShouldContinue(checks, 1_000, 2_000), true);
+  assert.equal(releaseStatusShouldContinue({ github_actions: { state: "passed" }, npm: { state: "published" } }, 1_000, 2_000), false);
+  assert.equal(releaseStatusShouldContinue({ github_actions: { state: "failed" }, npm: { state: "not_published" } }, 1_000, 2_000), false);
+  assert.equal(releaseStatusShouldContinue({ github_actions: { state: "unavailable" }, npm: { state: "not_published" } }, 1_000, 2_000), true);
+  assert.equal(releaseStatusShouldContinue({ github_actions: { state: "unavailable" }, npm: { state: "published" } }, 1_000, 2_000), false);
+  assert.equal(releaseStatusShouldContinue(checks, 2_000, 2_000), false);
+});
+
+test("release status maps checks to traffic-light dots", () => {
+  assert.equal(releaseStatusDot("clean"), "🟢");
+  assert.equal(releaseStatusDot("running"), "🟡");
+  assert.equal(releaseStatusDot("failed"), "🔴");
+  assert.equal(releaseStatusDot("ready"), "🟢");
 });
 
 test("explicit release versions normalize major.minor and reject patch input", () => {

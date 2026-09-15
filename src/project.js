@@ -182,6 +182,19 @@ export function releaseWaitMinutes(args = []) {
   return minutes;
 }
 
+export function releaseStatusShouldContinue(checks, now, deadline) {
+  if (now >= deadline) return false;
+  if (checks.github_actions.state === "failed") return false;
+  if (checks.github_actions.state === "unavailable") return !["published", "unavailable"].includes(checks.npm.state);
+  return !(checks.github_actions.state === "passed" && checks.npm.state === "published");
+}
+
+export function releaseStatusDot(state, ready = false) {
+  if (ready || ["clean", "yes", "present and correct", "passed", "published", "ready"].includes(state)) return "🟢";
+  if (["dirty", "no", "missing or incorrect", "failed", "unavailable", "not ready"].includes(state)) return "🔴";
+  return "🟡";
+}
+
 function releaseTagState(tag) {
   const local = run("git", ["rev-parse", `refs/tags/${tag}`], { inherit: false, failOnError: false });
   const remote = run("git", ["ls-remote", "origin", `refs/tags/${tag}`], { inherit: false, failOnError: false });
@@ -201,8 +214,8 @@ function gitReleaseState() {
   return { clean: clean.status === 0 && !clean.stdout.trim(), branch: branch.status === 0 ? branch.stdout.trim() : null, pushed: Boolean(headSha && remoteSha && headSha === remoteSha), head_sha: headSha || null, remote_sha: remoteSha || null };
 }
 
-function githubActionsState(repository, tag, timeout) {
-  const result = run("gh", ["run", "list", "--repo", repository, "--ref", tag, "--limit", "100", "--json", "status,conclusion,databaseId,displayTitle,workflowName,url,headSha"], { inherit: false, failOnError: false, timeout });
+function githubActionsState(repository, commit, timeout) {
+  const result = run("gh", ["run", "list", "--repo", repository, "--commit", commit, "--limit", "100", "--json", "status,conclusion,databaseId,displayTitle,workflowName,url,headSha"], { inherit: false, failOnError: false, timeout });
   if (result.status !== 0) return { state: "unavailable", runs: [], error: (result.stderr || result.stdout || "GitHub Actions could not be queried.").trim() };
   let runs;
   try { runs = JSON.parse(result.stdout || "[]"); } catch { return { state: "unavailable", runs: [], error: "GitHub Actions returned invalid JSON." }; }
@@ -354,22 +367,26 @@ async function releaseStatus(args = []) {
   const repository = remoteRepository();
   do {
     const remaining = Math.max(1, deadline - Date.now());
-    checks.github_actions = githubActionsState(repository, tag, Math.min(10_000, remaining));
+    checks.github_actions = githubActionsState(repository, checks.tag.remote_sha || checks.tag.local_sha || "", Math.min(10_000, remaining));
     checks.npm = npmReleaseState(name, currentVersion, Math.min(10_000, Math.max(1, deadline - Date.now())));
-    const terminal = ["passed", "failed", "unavailable"].includes(checks.github_actions.state);
-    const npmTerminal = ["published", "not_published"].includes(checks.npm.state);
-    if (Date.now() >= deadline || (terminal && npmTerminal) || ["failed", "unavailable"].includes(checks.github_actions.state)) break;
+    if (!releaseStatusShouldContinue(checks, Date.now(), deadline)) break;
     await new Promise((resolve) => setTimeout(resolve, Math.min(5000, Math.max(1, deadline - Date.now()))));
   } while (Date.now() < deadline);
   const result = { package: name, version: currentVersion, tag, repository, wait_minutes: waitMinutes, checks, ok: checks.git.clean && checks.git.pushed && checks.tag.matches && checks.github_actions.state === "passed" && checks.npm.state === "published" };
   if (json) console.log(JSON.stringify(result, null, 2));
   else {
     console.log(`${name}@${currentVersion}`);
-    console.log(`workspace: ${checks.git.clean ? "clean" : "dirty"}; pushed: ${checks.git.pushed ? "yes" : "no"}`);
-    console.log(`tag ${tag}: ${checks.tag.matches ? "present and correct" : "missing or incorrect"}`);
-    console.log(`GitHub Actions: ${checks.github_actions.state}`);
-    console.log(`npm: ${checks.npm.state}`);
-    console.log(`release status: ${result.ok ? "ready" : "not ready"}`);
+    const clean = checks.git.clean ? "clean" : "dirty";
+    const pushed = checks.git.pushed ? "yes" : "no";
+    const tagState = checks.tag.matches ? "present and correct" : "missing or incorrect";
+    const releaseState = result.ok ? "ready" : "not ready";
+    console.log(`workspace: ${releaseStatusDot(clean)} ${clean}; pushed: ${releaseStatusDot(pushed)} ${pushed}`);
+    console.log(`tag ${tag}: ${releaseStatusDot(tagState)} ${tagState}`);
+    const actionsError = checks.github_actions.error ? ` — ${checks.github_actions.error.replace(/\s+/g, " ")}` : "";
+    const npmError = checks.npm.error ? ` — ${checks.npm.error.replace(/\s+/g, " ")}` : "";
+    console.log(`GitHub Actions: ${releaseStatusDot(checks.github_actions.state)} ${checks.github_actions.state}${actionsError}`);
+    console.log(`npm: ${releaseStatusDot(checks.npm.state)} ${checks.npm.state}${npmError}`);
+    console.log(`release status: ${releaseStatusDot(releaseState)} ${releaseState}`);
   }
   return result;
 }
