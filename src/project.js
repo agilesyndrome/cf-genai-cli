@@ -5,6 +5,7 @@ import { migrateD1, shellCommand } from "./d1.js";
 import { compareVersions } from "./version.js";
 
 const packagePath = "package.json";
+const basePackageName = "@agilesyndrome/cf-genai-base";
 const npmRegistry = "https://registry.npmjs.org";
 const releaseStatusCommandTimeout = 10_000;
 const DATA_ACCESS_EXTENSIONS = new Set([".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx"]);
@@ -25,6 +26,20 @@ function run(command, args, { inherit = true, failOnError = true, timeout, env }
 function packageJson() {
   if (!existsSync(packagePath)) throw new Error("package.json was not found in the current directory.");
   return JSON.parse(readFileSync(packagePath, "utf8"));
+}
+
+function packageDependency(packageMetadata, name) {
+  return ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"]
+    .map((section) => packageMetadata[section]?.[name])
+    .find((value) => value !== undefined) || null;
+}
+
+export function baseDependencyVersion(packageMetadata = {}) {
+  if (packageMetadata.name === basePackageName) return packageMetadata.version || null;
+  const spec = packageDependency(packageMetadata, basePackageName);
+  if (!spec) return null;
+  const match = String(spec).match(/\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?/);
+  return match ? match[0] : null;
 }
 
 function isCfGenaiProject(cwd) {
@@ -244,6 +259,20 @@ function npmReleaseState(name, currentVersion, timeout) {
   return { state: /E404|not found/i.test(`${result.stdout}\n${result.stderr}`) ? "not_published" : "unavailable", version: null, error: (result.stderr || result.stdout || "npm could not be queried.").trim() };
 }
 
+function baseReleaseState(packageMetadata, timeout) {
+  const configured = baseDependencyVersion(packageMetadata);
+  const spec = packageMetadata.name === basePackageName ? packageMetadata.version : packageDependency(packageMetadata, basePackageName);
+  if (!spec) return { state: "not_declared", version: null, latest: null };
+  if (!configured) return { state: "unavailable", version: null, latest: null, spec, error: `Could not determine a version from ${basePackageName}: ${spec}` };
+  const result = run("npm", ["view", basePackageName, "version", "--json", "--registry", npmRegistry], { inherit: false, failOnError: false, timeout });
+  if (result.status !== 0) return { state: "unavailable", version: configured, latest: null, spec, error: (result.stderr || result.stdout || "npm could not be queried.").trim() };
+  let latest = result.stdout.trim();
+  try { latest = JSON.parse(latest); } catch { /* npm may return an unquoted version */ }
+  if (!latest) return { state: "unavailable", version: configured, latest: null, spec };
+  const outdated = compareVersions(latest, configured) > 0;
+  return { state: outdated ? "outdated" : "current", version: configured, latest, spec, ...(outdated ? { upgrade: `npm install ${basePackageName}@latest` } : {}) };
+}
+
 export function devCommand({ hasScript, args = [] }) {
   const forwarded = args[0] === "--" ? args.slice(1) : args;
   const command = hasScript ? ["npm", "run", "dev", ...forwarded] : ["npx", "wrangler", "dev", ...forwarded];
@@ -372,7 +401,7 @@ async function releaseStatus(args = []) {
   const json = args.includes("--json");
   const deadline = Date.now() + waitMinutes * 60_000;
   const tag = `v${currentVersion}`;
-  const checks = { git: gitReleaseState(), tag: releaseTagState(tag), github_actions: { state: "pending", runs: [] }, npm: { state: "not_published", version: null } };
+  const checks = { git: gitReleaseState(), tag: releaseTagState(tag), base: baseReleaseState(packageJson(), releaseStatusCommandTimeout), github_actions: { state: "pending", runs: [] }, npm: { state: "not_published", version: null } };
   const repository = remoteRepository();
   do {
     const remaining = Math.max(1, deadline - Date.now());
@@ -393,8 +422,15 @@ async function releaseStatus(args = []) {
     console.log(`tag ${tag}: ${releaseStatusDot(tagState)} ${tagState}`);
     const actionsError = checks.github_actions.error ? ` — ${checks.github_actions.error.replace(/\s+/g, " ")}` : "";
     const npmError = checks.npm.error ? ` — ${checks.npm.error.replace(/\s+/g, " ")}` : "";
+    const baseError = checks.base.error ? ` — ${checks.base.error.replace(/\s+/g, " ")}` : "";
     console.log(`GitHub Actions: ${releaseStatusDot(checks.github_actions.state)} ${checks.github_actions.state}${actionsError}`);
     console.log(`npm: ${releaseStatusDot(checks.npm.state)} ${checks.npm.state}${npmError}`);
+    if (checks.base.state === "outdated") {
+      console.log(`cf-genai-base: ${releaseStatusDot(checks.base.state)} outdated (${checks.base.version}; latest ${checks.base.latest})`);
+      console.log(`  Upgrade: ${checks.base.upgrade}`);
+    } else if (checks.base.state !== "not_declared") {
+      console.log(`cf-genai-base: ${releaseStatusDot(checks.base.state)} ${checks.base.state}${baseError}`);
+    }
     console.log(`release status: ${releaseStatusDot(releaseState)} ${releaseState}`);
   }
   return result;

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { clearSql, parseJsonRows, stripInternalRows, targetArgs } from "../src/d1.js";
 import { main } from "../src/cli.js";
-import { dataAccessLint, devCommand, isNpmAuthenticationFailure, normalizeReleaseVersion, releaseStatusDot, releaseStatusShouldContinue, releaseWaitMinutes } from "../src/project.js";
+import { baseDependencyVersion, dataAccessLint, devCommand, isNpmAuthenticationFailure, normalizeReleaseVersion, releaseStatusDot, releaseStatusShouldContinue, releaseWaitMinutes } from "../src/project.js";
 
 test("dev command loads .env.dev through 1Password", () => {
   assert.deepEqual(devCommand({ hasScript: true, args: ["--", "--host", "127.0.0.1"] }), [
@@ -101,7 +101,15 @@ test("release status maps checks to traffic-light dots", () => {
   assert.equal(releaseStatusDot("clean"), "🟢");
   assert.equal(releaseStatusDot("running"), "🟡");
   assert.equal(releaseStatusDot("failed"), "🔴");
+  assert.equal(releaseStatusDot("outdated"), "🟡");
   assert.equal(releaseStatusDot("ready"), "🟢");
+});
+
+test("release status reads the base version from package metadata", () => {
+  assert.equal(baseDependencyVersion({ dependencies: { "@agilesyndrome/cf-genai-base": "^2.1.0" } }), "2.1.0");
+  assert.equal(baseDependencyVersion({ devDependencies: { "@agilesyndrome/cf-genai-base": "2.2.0" } }), "2.2.0");
+  assert.equal(baseDependencyVersion({ name: "@agilesyndrome/cf-genai-base", version: "3.0.0" }), "3.0.0");
+  assert.equal(baseDependencyVersion({ dependencies: { "@agilesyndrome/other": "1.0.0" } }), null);
 });
 
 test("explicit release versions normalize major.minor and reject patch input", () => {
