@@ -1,6 +1,6 @@
 {
   "name": "@agilesyndrome/cf-genai-cli",
-  "version": "4.1.0",
+  "version": "4.1.1",
   "type": "module",
   "description": "Safe operational commands for Cloudflare Workers and D1 projects.",
   "bin": {
