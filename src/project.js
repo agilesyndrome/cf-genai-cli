@@ -388,7 +388,7 @@ function applyDevMigrations(env = process.env) {
 export function runProjectCommand(command, args = []) {
   if (command === "check") { dataAccessLint(); return run("npm", ["run", "check"]); }
   if (command === "lint") { if (args.length && args[0] !== "data-access") throw new Error("Unknown lint target. Use data-access."); return dataAccessLint(); }
-  if (command === "ci:lint") { dataAccessLint(); return run("npm", ["run", "check"]); }
+  if (command === "ci:lint") return dataAccessLint();
   if (command === "test") return run("npm", ["test"]);
   if (command === "build" || command === "ci") return run("npm", ["run", "build"]);
   if (command === "dev") {

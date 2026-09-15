@@ -40,6 +40,20 @@ test("data access lint recognizes consumers by package metadata, not folder name
   }
 });
 
+test("ci:lint is a release preflight and does not recurse into package check", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "cf-genai-ci-lint-"));
+  const previous = process.cwd();
+  try {
+    await mkdir(join(cwd, "src"));
+    await writeFile(join(cwd, "package.json"), JSON.stringify({ name: "@agilesyndrome/cf-genai-example", scripts: { check: "node -e process.exit(1)" } }));
+    process.chdir(cwd);
+    assert.deepEqual(await main(["ci:lint"]), { skipped: false, violations: [] });
+  } finally {
+    process.chdir(previous);
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
 test("base package metadata does not lint its own framework internals", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "base-lint-"));
   try {
