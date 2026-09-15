@@ -6,14 +6,16 @@ import { compareVersions } from "./version.js";
 
 const packagePath = "package.json";
 const npmRegistry = "https://registry.npmjs.org";
+const releaseStatusCommandTimeout = 10_000;
 const DATA_ACCESS_EXTENSIONS = new Set([".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx"]);
 const DATA_ACCESS_DIRECT = /\b(?:env|environment)\s*\.\s*DB\s*\.\s*prepare\s*\(|\bDB\s*\.\s*prepare\s*\(/;
 
-function run(command, args, { inherit = true, failOnError = true, timeout } = {}) {
+function run(command, args, { inherit = true, failOnError = true, timeout, env } = {}) {
   const result = spawnSync(command, args, {
     stdio: inherit ? "inherit" : ["ignore", "pipe", "pipe"],
     encoding: "utf8",
     ...(timeout === undefined ? {} : { timeout }),
+    ...(env === undefined ? {} : { env }),
   });
   if (result.error && failOnError) throw result.error;
   if (result.status !== 0 && failOnError) process.exitCode = result.status || 1;
@@ -197,7 +199,14 @@ export function releaseStatusDot(state, ready = false) {
 
 function releaseTagState(tag) {
   const local = run("git", ["rev-parse", `refs/tags/${tag}`], { inherit: false, failOnError: false });
-  const remote = run("git", ["ls-remote", "origin", `refs/tags/${tag}`], { inherit: false, failOnError: false });
+  // Do not allow Git to wait for credentials in non-interactive images or CI.
+  // A remote/network failure is a status result, not a reason to block the CLI.
+  const remote = run("git", ["ls-remote", "origin", `refs/tags/${tag}`], {
+    inherit: false,
+    failOnError: false,
+    timeout: releaseStatusCommandTimeout,
+    env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+  });
   const localSha = local.status === 0 ? local.stdout.trim() : "";
   const remoteSha = remote.status === 0 ? remote.stdout.trim().split(/\s+/)[0] : "";
   return { present: Boolean(localSha && remoteSha), local_sha: localSha || null, remote_sha: remoteSha || null, matches: Boolean(localSha && remoteSha && localSha === remoteSha) };
