@@ -1,4 +1,5 @@
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { migrateD1, shellCommand } from "./d1.js";
@@ -26,6 +27,53 @@ function run(command, args, { inherit = true, failOnError = true, timeout, env }
 function packageJson() {
   if (!existsSync(packagePath)) throw new Error("package.json was not found in the current directory.");
   return JSON.parse(readFileSync(packagePath, "utf8"));
+}
+
+function packageMigrations(packageName, cwd = process.cwd()) {
+  const directory = join(cwd, "node_modules", ...packageName.split("/"), "migrations");
+  if (!existsSync(directory)) return [];
+  return readdirSync(directory).filter((name) => /^\d+_.+\.sql$/.test(name)).sort().map((name) => ({ name, path: join(directory, name), sql: readFileSync(join(directory, name), "utf8") }));
+}
+
+function migrationHash(sql) { return createHash("sha256").update(sql).digest("hex").slice(0, 12); }
+
+export function vendorPackageMigrations({ packageName = basePackageName, version, cwd = process.cwd() } = {}) {
+  const destination = join(cwd, "migrations");
+  if (!existsSync(destination)) mkdirSync(destination, { recursive: true });
+  const sources = packageMigrations(packageName, cwd);
+  if (!sources.length) return { packageName, version, added: [], skipped: [] };
+  const existing = readdirSync(destination).filter((name) => /^\d+_.+\.sql$/.test(name));
+  const used = new Set(existing);
+  const sourceText = existing.map((name) => readFileSync(join(destination, name), "utf8")).join("\n");
+  let next = Math.max(0, ...existing.map((name) => Number(name.match(/^\d+/)?.[0] || 0))) + 1;
+  const added = [];
+  const skipped = [];
+  for (const source of sources) {
+    const marker = `cf-genai-source: ${packageName}/${source.name}`;
+    if (sourceText.includes(marker)) { skipped.push(source.name); continue; }
+    let target;
+    do { target = `${String(next++).padStart(4, "0")}_${packageName.split("/").at(-1).replaceAll("-", "_")}_${source.name.replace(/^\d+_/, "")}`; } while (used.has(target));
+    const content = `-- ${marker}@${version || "installed"} sha256:${migrationHash(source.sql)}\n${source.sql.trim()}\n`;
+    writeFileSync(join(destination, target), content);
+    used.add(target);
+    added.push(target);
+  }
+  return { packageName, version, added, skipped };
+}
+
+function upgradePackage(args = []) {
+  const target = args[0] === "base" ? basePackageName : args[0];
+  if (target !== basePackageName) throw new Error("Only the base package can be upgraded with this command: cf-genai upgrade base <latest|VERSION>.");
+  const requested = args[1] || "latest";
+  if (args.length > 2) throw new Error("Upgrade accepts one package version: cf-genai upgrade base <latest|VERSION>.");
+  const result = run("npm", ["install", `${basePackageName}@${requested}`], { failOnError: false });
+  if (result.status !== 0) throw new Error("npm install failed; no package migrations were copied.");
+  const installed = packageJson().dependencies?.[basePackageName] || packageJson().devDependencies?.[basePackageName] || requested;
+  const migrationResult = vendorPackageMigrations({ packageName: basePackageName, version: installed });
+  console.log(`Upgraded ${basePackageName} to ${installed}.`);
+  console.log(`Package migrations added: ${migrationResult.added.length}; already vendored: ${migrationResult.skipped.length}.`);
+  for (const name of migrationResult.added) console.log(`  + migrations/${name}`);
+  return migrationResult;
 }
 
 function packageDependency(packageMetadata, name) {
@@ -126,6 +174,13 @@ function npmVersionState(name, requestedVersion) {
   throw new Error(`Unable to verify whether ${name}@${requestedVersion} is published.`);
 }
 
+function npmPackageExists(name) {
+  const result = run("npm", ["view", name, "name", "--json", "--registry", npmRegistry], { inherit: false, failOnError: false });
+  if (result.status === 0) return Boolean(result.stdout.trim());
+  if (/E404|not found/i.test(`${result.stdout}\n${result.stderr}`)) return false;
+  throw new Error(`Unable to verify whether ${name} exists on npm.`);
+}
+
 export function normalizeReleaseVersion(value) {
   const match = String(value || "").trim().match(/^(\d+)\.(\d+)$/);
   if (!match) throw new Error("--version must be a major.minor version such as 4.1; patch is assigned as .0.");
@@ -189,6 +244,28 @@ function remoteRepository() {
   return `${match[1]}/${match[2]}`;
 }
 
+function addNpmTrust(name) {
+  const workflow = ".github/workflows/publish.yml";
+  if (!existsSync(workflow)) throw new Error(`Cannot configure npm trust: ${workflow} was not found.`);
+  const npmVersionResult = run("npm", ["--version"], { inherit: false, failOnError: false });
+  const npmVersionOutput = npmVersionResult.stdout?.trim() || "";
+  if (npmVersionResult.status !== 0 || compareVersions(npmVersionOutput, "11.15.0") < 0) {
+    throw new Error(`npm trust requires npm 11.15.0 or newer (found ${npmVersionOutput || "unknown"}).`);
+  }
+  const trust = run("npm", [
+    "trust", "github", name,
+    "--file", "publish.yml",
+    "--repo", remoteRepository(),
+    "--allow-publish",
+    "--yes",
+    "--registry", npmRegistry,
+  ], { failOnError: false });
+  if (trust.status !== 0) {
+    throw new Error("Unable to configure npm Trusted Publishing. Confirm that the package exists, your npm account has 2FA enabled, and you have package write access.");
+  }
+  return trust;
+}
+
 export function releaseWaitMinutes(args = []) {
   const index = args.findIndex((arg) => arg === "--wait" || arg.startsWith("--wait="));
   if (index < 0) return 5;
@@ -239,7 +316,7 @@ function gitReleaseState() {
 }
 
 function githubActionsState(repository, commit, timeout) {
-  const result = run("gh", ["run", "list", "--repo", repository, "--commit", commit, "--limit", "100", "--json", "status,conclusion,databaseId,displayTitle,workflowName,url,headSha"], { inherit: false, failOnError: false, timeout });
+  const result = run("gh", ["run", "list", "--repo", repository, "--workflow", "publish.yml", "--commit", commit, "--limit", "100", "--json", "status,conclusion,databaseId,displayTitle,workflowName,url,headSha"], { inherit: false, failOnError: false, timeout });
   if (result.status !== 0) return { state: "unavailable", runs: [], error: (result.stderr || result.stdout || "GitHub Actions could not be queried.").trim() };
   let runs;
   try { runs = JSON.parse(result.stdout || "[]"); } catch { return { state: "unavailable", runs: [], error: "GitHub Actions returned invalid JSON." }; }
@@ -270,7 +347,7 @@ function baseReleaseState(packageMetadata, timeout) {
   try { latest = JSON.parse(latest); } catch { /* npm may return an unquoted version */ }
   if (!latest) return { state: "unavailable", version: configured, latest: null, spec };
   const outdated = compareVersions(latest, configured) > 0;
-  return { state: outdated ? "outdated" : "current", version: configured, latest, spec, ...(outdated ? { upgrade: `npm install ${basePackageName}@latest` } : {}) };
+  return { state: outdated ? "outdated" : "current", version: configured, latest, spec, ...(outdated ? { upgrade: "cf-genai upgrade base latest" } : {}) };
 }
 
 export function devCommand({ hasScript, args = [] }) {
@@ -321,7 +398,9 @@ export function runProjectCommand(command, args = []) {
     const [program, ...programArgs] = devCommand({ hasScript: Boolean(scripts.dev), args });
     return run(program, programArgs);
   }
+  if (command === "upgrade") return upgradePackage(args);
   if (command === "release" && args.includes("--first")) return publishFirst(args);
+  if (command === "release" && args.includes("--add-trust")) return addTrust(args);
   if (command === "release") return release(args);
   if (command === "release-status") return releaseStatus(args);
   return null;
@@ -338,7 +417,22 @@ function publishFirst(args) {
   ensureNpmLogin(name);
   if (npmVersion(name, currentVersion)) throw new Error(name + "@" + currentVersion + " is already published.");
   console.log("Publishing " + name + "@" + currentVersion + " to npm...");
-  return run("npm", ["publish", "--access", "public", "--provenance=false"]);
+  const published = run("npm", ["publish", "--access", "public", "--provenance=false"]);
+  if (published.status !== 0) return published;
+  console.log("Configuring npm Trusted Publishing for " + name + "...");
+  return addNpmTrust(name);
+}
+
+function addTrust(args) {
+  if (args.includes("--first")) throw new Error("Use either --first or --add-trust; --first already configures Trusted Publishing after the initial publish.");
+  assertFlag(args, "--confirm", "Changing npm Trusted Publishing requires explicit human confirmation.");
+  assertClean();
+  const name = packageName();
+  if (!npmPackageExists(name)) {
+    throw new Error(`${name} must be published before Trusted Publishing can be configured. Run cf-genai release --first --confirm.`);
+  }
+  console.log("Configuring npm Trusted Publishing for " + name + "...");
+  return addNpmTrust(name);
 }
 
 function release(args) {
@@ -367,7 +461,15 @@ function release(args) {
   const typeIndex = args.indexOf("--type");
   const type = typeIndex >= 0 ? args[typeIndex + 1] : "patch";
   if (!["patch", "minor", "major"].includes(type)) throw new Error("--type must be patch, minor, or major.");
-  const consumed = requestedVersion ? false : Boolean(npmVersion(name, currentVersion) || tagExists(`v${currentVersion}`));
+  const currentPublished = requestedVersion ? false : npmVersionState(name, currentVersion).exists;
+  const currentTagExists = requestedVersion ? false : tagExists(`v${currentVersion}`);
+  if (!requestedVersion && currentTagExists && !currentPublished) {
+    throw new Error(`${name}@${currentVersion} has a release tag but is not published. Repair the failed publish or run release-status before creating another release.`);
+  }
+  if (!requestedVersion && !currentPublished && !currentTagExists) {
+    throw new Error(`${name} is not published yet. Run cf-genai release --first --confirm to bootstrap the npm package before creating a release tag.`);
+  }
+  const consumed = requestedVersion ? false : Boolean(currentPublished || currentTagExists);
   if (dryRun) {
     console.log(`Dry run: ${name}@${currentVersion}${consumed ? ` would bump ${type}` : " is ready to release"}. Main is synchronized and no changes were made.`);
     return;
@@ -421,9 +523,11 @@ async function releaseStatus(args = []) {
     console.log(`workspace: ${releaseStatusDot(clean)} ${clean}; pushed: ${releaseStatusDot(pushed)} ${pushed}`);
     console.log(`tag ${tag}: ${releaseStatusDot(tagState)} ${tagState}`);
     const actionsError = checks.github_actions.error ? ` — ${checks.github_actions.error.replace(/\s+/g, " ")}` : "";
+    const failedPublish = checks.github_actions.runs?.find((run) => run.status === "completed" && run.conclusion !== "success");
+    const failedPublishError = failedPublish ? ` — ${failedPublish.conclusion}${failedPublish.url ? ` (${failedPublish.url})` : ""}` : "";
     const npmError = checks.npm.error ? ` — ${checks.npm.error.replace(/\s+/g, " ")}` : "";
     const baseError = checks.base.error ? ` — ${checks.base.error.replace(/\s+/g, " ")}` : "";
-    console.log(`GitHub Actions: ${releaseStatusDot(checks.github_actions.state)} ${checks.github_actions.state}${actionsError}`);
+    console.log(`GitHub Actions: ${releaseStatusDot(checks.github_actions.state)} ${checks.github_actions.state}${actionsError}${failedPublishError}`);
     console.log(`npm: ${releaseStatusDot(checks.npm.state)} ${checks.npm.state}${npmError}`);
     if (checks.base.state === "outdated") {
       console.log(`cf-genai-base: ${releaseStatusDot(checks.base.state)} outdated (${checks.base.version}; latest ${checks.base.latest})`);

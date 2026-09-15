@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { clearSql, parseJsonRows, stripInternalRows, targetArgs } from "../src/d1.js";
 import { main } from "../src/cli.js";
-import { baseDependencyVersion, dataAccessLint, devCommand, isNpmAuthenticationFailure, normalizeReleaseVersion, releaseStatusDot, releaseStatusShouldContinue, releaseWaitMinutes } from "../src/project.js";
+import { baseDependencyVersion, dataAccessLint, devCommand, isNpmAuthenticationFailure, normalizeReleaseVersion, releaseStatusDot, releaseStatusShouldContinue, releaseWaitMinutes, vendorPackageMigrations } from "../src/project.js";
 
 test("dev command loads .env.dev through 1Password", () => {
   assert.deepEqual(devCommand({ hasScript: true, args: ["--", "--host", "127.0.0.1"] }), [
@@ -67,6 +67,23 @@ test("internal rows are not imported", () => {
   assert.equal(stripInternalRows(sql), 'INSERT INTO "recipes" VALUES (1);');
 });
 
+test("package migrations are vendored once with ordered site migration names", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "cf-genai-upgrade-"));
+  try {
+    await mkdir(join(cwd, "migrations"));
+    await mkdir(join(cwd, "node_modules", "@agilesyndrome", "cf-genai-base", "migrations"), { recursive: true });
+    await writeFile(join(cwd, "migrations", "0001_existing.sql"), "SELECT 1;\n");
+    await writeFile(join(cwd, "node_modules", "@agilesyndrome", "cf-genai-base", "migrations", "0003_auth_groups.sql"), "CREATE TABLE auth_groups(name TEXT);\n");
+    const first = vendorPackageMigrations({ cwd, version: "4.1.1" });
+    assert.deepEqual(first.added, ["0002_cf_genai_base_auth_groups.sql"]);
+    const second = vendorPackageMigrations({ cwd, version: "4.1.1" });
+    assert.deepEqual(second.added, []);
+    assert.deepEqual(second.skipped, ["0003_auth_groups.sql"]);
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
 test("Wrangler JSON envelopes are flattened to rows", () => {
   assert.deepEqual(parseJsonRows(JSON.stringify([{ results: [{ name: "recipes" }] }])), [{ name: "recipes" }]);
 });
@@ -125,6 +142,10 @@ test("release requires explicit human confirmation before inspecting or changing
 
 test("initial publish requires explicit human confirmation", async () => {
   await assert.rejects(() => main(["release", "--first"]), /Initial npm publishing is irreversible.*--confirm/)
+});
+
+test("adding npm trust requires explicit human confirmation", async () => {
+  await assert.rejects(() => main(["release", "--add-trust"]), /Changing npm Trusted Publishing.*--confirm/)
 });
 
 test("npm authentication failures are recognized", () => {

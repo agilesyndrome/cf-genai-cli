@@ -9,7 +9,8 @@ const usage = `Usage:
   cf-genai check|test|build|ci|ci:lint
   cf-genai lint data-access
   cf-genai dev [options]
-  cf-genai release [--confirm] [--first] [--dry-run] [--bypass-lint] [--type patch|minor|major] [--version MAJOR.MINOR]
+  cf-genai upgrade base <latest|VERSION>
+  cf-genai release [--confirm] [--first] [--add-trust] [--dry-run] [--bypass-lint] [--type patch|minor|major] [--version MAJOR.MINOR]
   cf-genai release-status [--wait MINUTES] [--json]
     cf-genai status [--env local|staging|production] [--json]
   cf-genai version
@@ -86,7 +87,7 @@ export async function main(args = process.argv.slice(2), env = process.env) {
   if (args[0]?.includes(":")) { const [domain, action] = args[0].split(":", 2); if (["user", "healthcheck", "healthchecks", "circuit-breaker", "circuit-breakers", "circuit"].includes(domain)) args = [domain, action, ...args.slice(1)]; }
   if (args[0] === "version") return runVersionCommand();
   const projectCommand = args[0];
-  if (["check", "test", "build", "ci", "ci:lint", "lint", "dev", "release", "release-status"].includes(projectCommand)) {
+  if (["check", "test", "build", "ci", "ci:lint", "lint", "dev", "upgrade", "release", "release-status"].includes(projectCommand)) {
     const result = runProjectCommand(projectCommand, args.slice(1));
     if (result === null) throw new Error(`Unknown command.\n\n${usage}`);
     return result;

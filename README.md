@@ -12,8 +12,11 @@ cf-genai lint data-access
 cf-genai test
 cf-genai ci
 cf-genai dev
+cf-genai upgrade base latest
+cf-genai upgrade base 4.1.1
 cf-genai release --confirm
 cf-genai release --first --confirm
+cf-genai release --add-trust --confirm
 cf-genai release --dry-run
 cf-genai release --version 4.1 --confirm
 cf-genai release-status
@@ -33,9 +36,13 @@ provided by `cf-genai-base`. Tests and migrations are excluded from this lint.
 GitHub Actions. `version` shows the installed CLI version and the latest npm
 version, with an upgrade command when one is available.
 
-For the initial npm publication only, use `cf-genai release --first --confirm`.
-It checks npm authentication first and starts `npm login` for the package scope when credentials are missing or invalid. It publishes the current package once with public access and provenance disabled so npm can prompt for your interactive 2FA code;
-subsequent releases should use the normal tag-triggered workflow.
+For the initial npm publication, use `cf-genai release --first --confirm`.
+It checks npm authentication, publishes the current package once with public
+access and provenance disabled, and then creates the matching npm Trusted
+Publisher rule for `.github/workflows/publish.yml`. npm 11.15.0 or newer and
+account-level 2FA are required for the trust step. If the package is already
+published, use `cf-genai release --add-trust --confirm`.
+Subsequent releases use the normal tag-triggered workflow.
 
 ```sh
 cf-genai d1 refresh local
@@ -66,6 +73,13 @@ with `--dry-run`); the CLI verifies a
 clean checkout on `main`, fetches and compares `origin/main`, pushes and
 verifies the release commit before creating the tag, and only then pushes the
 tag that triggers npm publishing. The release tag publishes the package through GitHub Actions with provenance. `config check` runs a Wrangler deploy dry-run. Production refresh remains intentionally unavailable; backups and restores are available with explicit file paths.
+
+`upgrade base VERSION` upgrades `@agilesyndrome/cf-genai-base` with npm and
+vendors package migrations not already represented in the repository's
+`migrations/` directory. The generated files are ordinary committed Wrangler
+migrations, so the same schema change is applied consistently to local,
+staging, and production D1 databases. Review and commit the package files,
+`package.json`, `package-lock.json`, and generated migrations together.
 Operational status can be read directly from the current site directory through Wrangler (no CLI login prompt):
   cf-genai healthcheck:list --env local
   cf-genai healthcheck:list --env staging
