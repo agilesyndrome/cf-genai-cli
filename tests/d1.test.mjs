@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { clearSql, parseJsonRows, stripInternalRows, targetArgs } from "../src/d1.js";
 import { main } from "../src/cli.js";
-import { dataAccessLint, devCommand, isNpmAuthenticationFailure } from "../src/project.js";
+import { dataAccessLint, devCommand, isNpmAuthenticationFailure, normalizeReleaseVersion, releaseWaitMinutes } from "../src/project.js";
 
 test("dev command loads .env.dev through 1Password", () => {
   assert.deepEqual(devCommand({ hasScript: true, args: ["--", "--host", "127.0.0.1"] }), [
@@ -23,6 +23,30 @@ test("data access lint detects direct D1 calls in cf-genai source", async () => 
     await writeFile(join(cwd, "package.json"), JSON.stringify({ name: "@agilesyndrome/cf-genai-cookbook" }));
     await writeFile(join(cwd, "src", "recipe.js"), "export const rows = env.DB.prepare('SELECT 1');\n");
     assert.throws(() => dataAccessLint({ cwd }), /Direct D1 access is not allowed/);
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test("data access lint recognizes consumers by package metadata, not folder name", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "cookbook-lint-"));
+  try {
+    await mkdir(join(cwd, "src"));
+    await writeFile(join(cwd, "package.json"), JSON.stringify({ name: "cookbook", dependencies: { "@agilesyndrome/cf-genai-base": "2.1.0" } }));
+    await writeFile(join(cwd, "src", "recipe.js"), "export const rows = env.DB.prepare('SELECT 1');\n");
+    assert.throws(() => dataAccessLint({ cwd }), /Direct D1 access is not allowed/);
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test("base package metadata does not lint its own framework internals", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "base-lint-"));
+  try {
+    await mkdir(join(cwd, "src"));
+    await writeFile(join(cwd, "package.json"), JSON.stringify({ name: "@agilesyndrome/cf-genai-base" }));
+    await writeFile(join(cwd, "src", "authorization.js"), "export const rows = env.DB.prepare('SELECT 1');\n");
+    assert.deepEqual(dataAccessLint({ cwd }), { skipped: true, violations: [] });
   } finally {
     await rm(cwd, { recursive: true, force: true });
   }
@@ -53,6 +77,21 @@ test("production refresh is absent from the command grammar", async () => {
 
 test("production migration requires an explicit confirmation", async () => {
   await assert.rejects(() => main(["d1", "migrate", "production"]), /requires --confirm-production/);
+});
+
+test("release status uses one shared five-minute default wait budget", () => {
+  assert.equal(releaseWaitMinutes([]), 5);
+  assert.equal(releaseWaitMinutes(["--wait", "3"]), 3);
+  assert.equal(releaseWaitMinutes(["--wait=0"]), 0);
+  assert.throws(() => releaseWaitMinutes(["--wait"]), /requires a number/);
+  assert.throws(() => releaseWaitMinutes(["--wait", "-1"]), /non-negative/);
+});
+
+test("explicit release versions normalize major.minor and reject patch input", () => {
+  assert.equal(normalizeReleaseVersion("4.1"), "4.1.0");
+  assert.equal(normalizeReleaseVersion("004.001"), "4.1.0");
+  assert.throws(() => normalizeReleaseVersion("4"), /major\.minor/);
+  assert.throws(() => normalizeReleaseVersion("4.1.2"), /major\.minor/);
 });
 
 test("release requires explicit human confirmation before inspecting or changing git", async () => {

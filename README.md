@@ -15,6 +15,9 @@ cf-genai dev
 cf-genai release --confirm
 cf-genai release --first --confirm
 cf-genai release --dry-run
+cf-genai release --version 4.1 --confirm
+cf-genai release-status
+cf-genai release-status --wait 3 --json
 cf-genai version
   cf-genai status
   cf-genai status --json
@@ -81,4 +84,4 @@ The standardized admin surface mirrors cf-genai-base and uses Wrangler authentic
 Back up and restore a complete D1 database with explicit files:
   cf-genai d1 backup production --output ./backup.sql --confirm-production
   cf-genai d1 restore staging --file ./backup.sql --yes
-`release` is the only release command. It creates the version commit and tag; the tag-triggered workflow publishes to npm.
+`release` creates the version commit and tag; the tag-triggered workflow publishes to npm. `release-status` verifies a clean, pushed workspace, the remote release tag, successful GitHub Actions runs for that tag, and npm publication. `--wait` is one total timeout in minutes shared by GitHub Actions and npm polling; the default is five minutes. Use `release --version MAJOR.MINOR` to explicitly jump to a version such as `4.1`; the CLI assigns patch `0`, rejects versions that are not greater than the current version, and refuses any version already present on npm or GitHub. This is useful for synchronizing older packages onto a common release line.

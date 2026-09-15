@@ -6,10 +6,11 @@ import { runVersionCommand } from "./version.js";
 import { siteStatus } from "./status.js";
 
 const usage = `Usage:
-  cf-genai check|test|build|ci
+  cf-genai check|test|build|ci|ci:lint
   cf-genai lint data-access
   cf-genai dev [options]
-  cf-genai release [--confirm] [--first] [--dry-run] [--type patch|minor|major]
+  cf-genai release [--confirm] [--first] [--dry-run] [--bypass-lint] [--type patch|minor|major] [--version MAJOR.MINOR]
+  cf-genai release-status [--wait MINUTES] [--json]
     cf-genai status [--env local|staging|production] [--json]
   cf-genai version
   cf-genai d1 refresh|backup|restore|migrate|status|check local|staging|production [options]
@@ -31,6 +32,8 @@ Options:
   --confirm-production        Explicitly permit production migration or breaker changes
   --confirm                    Confirm a destructive or release operation
   --dry-run                    Show release checks without changing Git or npm
+  --version MAJOR.MINOR        Explicit release target; patch is assigned as .0
+  --bypass-lint                Skip the release preflight lint (use sparingly)
   --json                      Return machine-readable output
   --help                      Show this help
 `;
@@ -83,7 +86,7 @@ export async function main(args = process.argv.slice(2), env = process.env) {
   if (args[0]?.includes(":")) { const [domain, action] = args[0].split(":", 2); if (["user", "healthcheck", "healthchecks", "circuit-breaker", "circuit-breakers", "circuit"].includes(domain)) args = [domain, action, ...args.slice(1)]; }
   if (args[0] === "version") return runVersionCommand();
   const projectCommand = args[0];
-  if (["check", "test", "build", "ci", "lint", "dev", "release"].includes(projectCommand)) {
+  if (["check", "test", "build", "ci", "ci:lint", "lint", "dev", "release", "release-status"].includes(projectCommand)) {
     const result = runProjectCommand(projectCommand, args.slice(1));
     if (result === null) throw new Error(`Unknown command.\n\n${usage}`);
     return result;
