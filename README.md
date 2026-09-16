@@ -89,10 +89,17 @@ The standardized admin surface mirrors cf-genai-base and uses Wrangler authentic
   cf-genai admin status --env staging
   cf-genai admin features --env staging
   cf-genai admin users --env staging
+  cf-genai admin tenants --env staging
   cf-genai admin scopes --env staging
   cf-genai admin groups --env staging
   cf-genai admin healthchecks --env staging
   cf-genai admin circuit-breakers --env staging
+  cf-genai tenant list --env staging
+  cf-genai tenant get easley-family --env staging
+  cf-genai tenant create acme --name "Acme Corporation" --env staging
+  cf-genai tenant update acme --name "Acme Inc." --env staging
+  cf-genai user get someone@example.com --env staging
+  cf-genai user update someone@example.com --tenants easley-family,acme --env staging
   cf-genai healthchecks set llm:provider red --env staging
   cf-genai circuit-breakers set llm:provider tripped --env staging
 Back up and restore a complete D1 database with explicit files:

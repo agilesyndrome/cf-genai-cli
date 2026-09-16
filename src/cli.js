@@ -1,5 +1,6 @@
 import { backupD1, checkConfig, checkD1, migrateD1, refreshLocalD1, refreshStagingD1, restoreD1, statusD1 } from "./d1.js";
 import { runUserCommand } from "./users.js";
+import { runTenantCommand } from "./tenants.js";
 import { runOperationalCommand } from "./operations.js";
 import { runProjectCommand } from "./project.js";
 import { runVersionCommand } from "./version.js";
@@ -15,9 +16,10 @@ const usage = `Usage:
     cf-genai status [--env local|staging|production] [--json]
   cf-genai version
   cf-genai d1 refresh|backup|restore|migrate|status|check local|staging|production [options]
-  cf-genai admin status|features|users|scopes|groups|healthchecks|circuit-breakers [options]
+  cf-genai admin status|features|users|tenants|scopes|groups|healthchecks|circuit-breakers [options]
   cf-genai config check [options]
   cf-genai user list|get|update [username] [options]
+  cf-genai tenant list|get|create|update [tenant-id] [options]
 
 Options:
   --database NAME             D1 binding or database name (default: DB)
@@ -56,6 +58,8 @@ function parseOptions(args, env = process.env) {
     roles: undefined,
     scopes: undefined,
     groups: undefined,
+    tenants: undefined,
+    name: undefined,
     json: false,
   };
   const positional = [];
@@ -70,7 +74,7 @@ function parseOptions(args, env = process.env) {
       const names = {
         database: "database", "production-database": "productionDatabase",
         "production-env": "productionEnv", "staging-env": "stagingEnv",
-        config: "config", wrangler: "wrangler", target: "target", env: "target", roles: "roles", scopes: "scopes", groups: "groups", output: "output", file: "file",
+        config: "config", wrangler: "wrangler", target: "target", env: "target", roles: "roles", scopes: "scopes", groups: "groups", tenants: "tenants", name: "name", output: "output", file: "file",
       };
       const optionName = names[key];
       if (!optionName) throw new Error(`Unknown option: ${arg}`);
@@ -84,7 +88,7 @@ function parseOptions(args, env = process.env) {
 }
 
 export async function main(args = process.argv.slice(2), env = process.env) {
-  if (args[0]?.includes(":")) { const [domain, action] = args[0].split(":", 2); if (["user", "healthcheck", "healthchecks", "circuit-breaker", "circuit-breakers", "circuit"].includes(domain)) args = [domain, action, ...args.slice(1)]; }
+  if (args[0]?.includes(":")) { const [domain, action] = args[0].split(":", 2); if (["user", "tenant", "healthcheck", "healthchecks", "circuit-breaker", "circuit-breakers", "circuit"].includes(domain)) args = [domain, action, ...args.slice(1)]; }
   if (args[0] === "version") return runVersionCommand();
   const projectCommand = args[0];
   if (["check", "test", "build", "ci", "ci:lint", "lint", "dev", "upgrade", "release", "release-status"].includes(projectCommand)) {
@@ -99,9 +103,10 @@ export async function main(args = process.argv.slice(2), env = process.env) {
     return;
   }
   let [domain, action, target] = options.positional;
-  if (domain === "admin") { const adminAction = { user: "users", healthcheck: "healthchecks", "circuit-breaker": "circuit-breakers", circuit: "circuit-breakers" }[action] || action; if (["local", "staging", "prod", "production"].includes(target)) options.target = target === "prod" ? "production" : target; if (["healthchecks", "circuit-breakers"].includes(adminAction)) return runOperationalCommand({ domain: adminAction, action: options.positional[2] || "list", identifier: options.positional[3], value: options.positional[4], options }); return runOperationalCommand({ domain: "admin", action: adminAction, identifier: options.positional[3], value: options.positional[4], options }); }
+  if (domain === "admin") { const adminAction = { user: "users", tenant: "tenants", healthcheck: "healthchecks", "circuit-breaker": "circuit-breakers", circuit: "circuit-breakers" }[action] || action; if (["local", "staging", "prod", "production"].includes(target)) options.target = target === "prod" ? "production" : target; if (adminAction === "tenants") return runTenantCommand({ action: options.positional[2] || "list", identifier: options.positional[3], name: options.name, options }); if (["healthchecks", "circuit-breakers"].includes(adminAction)) return runOperationalCommand({ domain: adminAction, action: options.positional[2] || "list", identifier: options.positional[3], value: options.positional[4], options }); return runOperationalCommand({ domain: "admin", action: adminAction, identifier: options.positional[3], value: options.positional[4], options }); }
   if (domain === "backup" || domain === "restore") { target = action || options.target; action = domain; return runD1FileCommand(action, target, options); }
   if (domain === "user") return runUserCommand({ action, username: target, options });
+  if (domain === "tenant") return runTenantCommand({ action, identifier: target, name: options.name, options });
   if (["healthcheck", "healthchecks", "circuit-breaker", "circuit-breakers", "circuit"].includes(domain)) return runOperationalCommand({ domain, action, identifier: target, value: options.positional[3], options });
   if (domain === "config" && action === "check") return checkConfig(options);
   if (domain !== "d1" || !["refresh", "backup", "restore", "migrate", "status", "check"].includes(action)) throw new Error(`Unknown command.\n\n${usage}`);
