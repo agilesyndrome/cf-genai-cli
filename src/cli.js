@@ -10,7 +10,7 @@ const usage = `Usage:
   cf-genai check|test|build|ci|ci:lint
   cf-genai lint data-access
   cf-genai dev [options]
-  cf-genai upgrade base <latest|VERSION>
+  cf-genai upgrade <base|auth|llm|messaging> <latest|VERSION>
   cf-genai release [--confirm] [--first] [--add-trust] [--dry-run] [--bypass-lint] [--type patch|minor|major] [--version MAJOR.MINOR]
   cf-genai release-status [--wait MINUTES] [--json]
     cf-genai status [--env local|staging|production] [--json]

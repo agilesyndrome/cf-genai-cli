@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { clearSql, parseJsonRows, stripInternalRows, targetArgs } from "../src/d1.js";
 import { main } from "../src/cli.js";
-import { baseDependencyVersion, dataAccessLint, devCommand, isNpmAuthenticationFailure, normalizeReleaseVersion, releaseStatusDot, releaseStatusShouldContinue, releaseWaitMinutes, vendorPackageMigrations } from "../src/project.js";
+import { baseDependencyVersion, dataAccessLint, devCommand, isNpmAuthenticationFailure, normalizeReleaseVersion, releaseStatusDot, releaseStatusShouldContinue, releaseWaitMinutes, requestedReleaseAction, upgradePackageName, vendorPackageMigrations } from "../src/project.js";
 
 test("dev command loads .env.dev through 1Password", () => {
   assert.deepEqual(devCommand({ hasScript: true, args: ["--", "--host", "127.0.0.1"] }), [
@@ -148,6 +148,20 @@ test("explicit release versions normalize major.minor and reject patch input", (
   assert.equal(normalizeReleaseVersion("004.001"), "4.1.0");
   assert.throws(() => normalizeReleaseVersion("4"), /major\.minor/);
   assert.throws(() => normalizeReleaseVersion("4.1.2"), /major\.minor/);
+});
+
+test("prepared release versions can be tagged without a fake downgrade commit", () => {
+  assert.deepEqual(requestedReleaseAction("5.0.0", "5.0.0"), { version: "5.0.0", bump: false });
+  assert.deepEqual(requestedReleaseAction("4.1.6", "5.0.0"), { version: "5.0.0", bump: true });
+  assert.throws(() => requestedReleaseAction("5.0.0", "4.1.0"), /must not be older/);
+});
+
+test("upgrade aliases cover the published first-party feature packages", () => {
+  assert.equal(upgradePackageName("base"), "@agilesyndrome/cf-genai-base");
+  assert.equal(upgradePackageName("auth"), "@agilesyndrome/cf-genai-auth");
+  assert.equal(upgradePackageName("llm"), "@agilesyndrome/cf-genai-llm");
+  assert.equal(upgradePackageName("messaging"), "@agilesyndrome/cf-genai-messaging");
+  assert.throws(() => upgradePackageName("posthog"), /Unknown cf-genai package/);
 });
 
 test("release requires explicit human confirmation before inspecting or changing git", async () => {
