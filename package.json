@@ -9,7 +9,8 @@
   "files": [
     "bin",
     "src",
-    "README.md"
+    "README.md",
+    "changelog.md"
   ],
   "scripts": {
     "check": "node --check bin/cf-genai.js && node --check src/cli.js && node --check src/d1.js && node --check src/operations.js && node --check src/project.js && node --check src/status.js && node --check src/tenants.js && node --check src/users.js && node --check src/version.js",

@@ -13,7 +13,9 @@ cf-genai test
 cf-genai ci
 cf-genai dev
 cf-genai upgrade base latest
-cf-genai upgrade base 4.1.1
+cf-genai upgrade auth latest
+cf-genai upgrade llm 5.0.0
+cf-genai upgrade messaging latest
 cf-genai release --confirm
 cf-genai release --first --confirm
 cf-genai release --add-trust --confirm
@@ -74,8 +76,8 @@ clean checkout on `main`, fetches and compares `origin/main`, pushes and
 verifies the release commit before creating the tag, and only then pushes the
 tag that triggers npm publishing. The release tag publishes the package through GitHub Actions with provenance. `config check` runs a Wrangler deploy dry-run. Production refresh remains intentionally unavailable; backups and restores are available with explicit file paths.
 
-`upgrade base VERSION` upgrades `@agilesyndrome/cf-genai-base` with npm and
-vendors package migrations not already represented in the repository's
+`upgrade PACKAGE VERSION` upgrades the first-party `base`, `auth`, `llm`, or
+`messaging` package with npm and vendors package migrations not already represented in the repository's
 `migrations/` directory. The generated files are ordinary committed Wrangler
 migrations, so the same schema change is applied consistently to local,
 staging, and production D1 databases. Review and commit the package files,
@@ -105,4 +107,4 @@ The standardized admin surface mirrors cf-genai-base and uses Wrangler authentic
 Back up and restore a complete D1 database with explicit files:
   cf-genai d1 backup production --output ./backup.sql --confirm-production
   cf-genai d1 restore staging --file ./backup.sql --yes
-`release` creates the version commit and tag; the tag-triggered workflow publishes to npm. `release-status` verifies a clean, pushed workspace, the remote release tag, successful GitHub Actions runs for that tag, npm publication, and whether the declared `cf-genai-base` version is current. An older base version is shown in yellow with an upgrade command. `--wait` is one total timeout in minutes shared by GitHub Actions and npm polling; the default is five minutes. Use `release --version MAJOR.MINOR` to explicitly jump to a version such as `4.1`; the CLI assigns patch `0`, rejects versions that are not greater than the current version, and refuses any version already present on npm or GitHub. This is useful for synchronizing older packages onto a common release line.
+`release` creates the version commit and tag; the tag-triggered workflow publishes to npm. `release-status` verifies a clean, pushed workspace, the remote release tag, successful GitHub Actions runs for that tag, npm publication, and whether the declared `cf-genai-base` version is current. An older base version is shown in yellow with an upgrade command. `--wait` is one total timeout in minutes shared by GitHub Actions and npm polling; the default is five minutes. Use `release --version MAJOR.MINOR` to explicitly jump to a version such as `5.0`; the CLI assigns patch `0`, accepts an equal prepared manifest version when its tag and npm version do not exist, rejects older versions, and refuses any version already present on npm or GitHub. This is useful for synchronizing packages onto a common release line.

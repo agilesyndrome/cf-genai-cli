@@ -7,6 +7,12 @@ import { compareVersions } from "./version.js";
 
 const packagePath = "package.json";
 const basePackageName = "@agilesyndrome/cf-genai-base";
+const upgradePackages = Object.freeze({
+  base: basePackageName,
+  auth: "@agilesyndrome/cf-genai-auth",
+  llm: "@agilesyndrome/cf-genai-llm",
+  messaging: "@agilesyndrome/cf-genai-messaging",
+});
 const npmRegistry = "https://registry.npmjs.org";
 const releaseStatusCommandTimeout = 10_000;
 const DATA_ACCESS_EXTENSIONS = new Set([".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx"]);
@@ -61,16 +67,21 @@ export function vendorPackageMigrations({ packageName = basePackageName, version
   return { packageName, version, added, skipped };
 }
 
+export function upgradePackageName(value) {
+  const target = upgradePackages[String(value || "")];
+  if (!target) throw new Error(`Unknown cf-genai package: ${value || "missing"}. Use base, auth, llm, or messaging.`);
+  return target;
+}
+
 function upgradePackage(args = []) {
-  const target = args[0] === "base" ? basePackageName : args[0];
-  if (target !== basePackageName) throw new Error("Only the base package can be upgraded with this command: cf-genai upgrade base <latest|VERSION>.");
+  const target = upgradePackageName(args[0]);
   const requested = args[1] || "latest";
-  if (args.length > 2) throw new Error("Upgrade accepts one package version: cf-genai upgrade base <latest|VERSION>.");
-  const result = run("npm", ["install", `${basePackageName}@${requested}`], { failOnError: false });
+  if (args.length > 2) throw new Error("Upgrade accepts one package and version: cf-genai upgrade <base|auth|llm|messaging> <latest|VERSION>.");
+  const result = run("npm", ["install", `${target}@${requested}`], { failOnError: false });
   if (result.status !== 0) throw new Error("npm install failed; no package migrations were copied.");
-  const installed = packageJson().dependencies?.[basePackageName] || packageJson().devDependencies?.[basePackageName] || requested;
-  const migrationResult = vendorPackageMigrations({ packageName: basePackageName, version: installed });
-  console.log(`Upgraded ${basePackageName} to ${installed}.`);
+  const installed = packageJson().dependencies?.[target] || packageJson().devDependencies?.[target] || requested;
+  const migrationResult = vendorPackageMigrations({ packageName: target, version: installed });
+  console.log(`Upgraded ${target} to ${installed}.`);
   console.log(`Package migrations added: ${migrationResult.added.length}; already vendored: ${migrationResult.skipped.length}.`);
   for (const name of migrationResult.added) console.log(`  + migrations/${name}`);
   return migrationResult;
@@ -185,6 +196,12 @@ export function normalizeReleaseVersion(value) {
   const match = String(value || "").trim().match(/^(\d+)\.(\d+)$/);
   if (!match) throw new Error("--version must be a major.minor version such as 4.1; patch is assigned as .0.");
   return `${Number(match[1])}.${Number(match[2])}.0`;
+}
+
+export function requestedReleaseAction(currentVersion, requestedVersion) {
+  const comparison = compareVersions(requestedVersion, currentVersion);
+  if (comparison < 0) throw new Error(`Requested version ${requestedVersion} must not be older than the current version ${currentVersion}.`);
+  return { version: requestedVersion, bump: comparison > 0 };
 }
 
 function requestedReleaseVersion(args = []) {
@@ -447,16 +464,18 @@ function release(args) {
   const name = packageName();
   let currentVersion = version();
   if (requestedVersion) {
-    if (compareVersions(requestedVersion, currentVersion) <= 0) throw new Error(`Requested version ${requestedVersion} must be greater than the current version ${currentVersion}.`);
+    const action = requestedReleaseAction(currentVersion, requestedVersion);
     const published = npmVersionState(name, requestedVersion);
     if (published.exists || tagExists(`v${requestedVersion}`)) throw new Error(`${name}@${requestedVersion} already exists; release versions cannot be reused.`);
     if (dryRun) {
-      console.log(`Dry run: ${name}@${currentVersion} would release as ${requestedVersion}. Main is synchronized and no changes were made.`);
+      console.log(`Dry run: ${name}@${currentVersion} would release as ${action.version}. Main is synchronized and no changes were made.`);
       return;
     }
-    const bumped = run("npm", ["version", requestedVersion, "--no-git-tag-version"]);
-    if (bumped.status !== 0) return bumped;
-    currentVersion = version();
+    if (action.bump) {
+      const bumped = run("npm", ["version", requestedVersion, "--no-git-tag-version"]);
+      if (bumped.status !== 0) return bumped;
+      currentVersion = version();
+    }
   }
   const typeIndex = args.indexOf("--type");
   const type = typeIndex >= 0 ? args[typeIndex + 1] : "patch";
